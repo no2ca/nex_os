@@ -3,7 +3,7 @@ ENTRY(_start)
 SECTIONS {
     . = 0x80200000;
 
-    .text :{
+    .text : ALIGN(4) {
         KEEP(*(.text._start));    /* .text._startを先頭にする */
         *(.text .text.*);
     }
