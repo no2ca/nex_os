@@ -4,6 +4,7 @@ set -xue
 # QEMUのファイルパス
 QEMU=qemu-system-riscv64
 
+cargo build -r
 cp ./target/riscv64gc-unknown-none-elf/release/nex ./kernel.elf
 
 # QEMUを起動
