@@ -12,6 +12,7 @@ fn panic(_info: &PanicInfo) -> ! {
 unsafe extern "C" {
     static mut __bss: u8;
     static __bss_end: u8;
+    static __stack_top: u8;
 }
 
 #[inline(always)]
@@ -60,23 +61,68 @@ fn sbi_call(
     Sbiret { err, value }
 }
 
-fn write(c: u8) {
-    sbi_call(c as i32, 0, 0, 0, 0, 0, 0, 1);
+struct Writer;
+
+impl Writer {
+    fn write_byte(c: u8) {
+        sbi_call(c as i32, 0, 0, 0, 0, 0, 0, 1);
+    }
+}
+
+use core::fmt;
+impl fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        s.bytes().for_each(|c| Writer::write_byte(c));
+        Ok(())
+    }
+}
+
+#[macro_export]
+macro_rules! println {
+    () => (print!("\n"));
+    ($($arg:tt)*) => (print!("{}\n", format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
+}
+
+fn _print(args: fmt::Arguments) {
+    use core::fmt::Write;
+    let mut writer = Writer;
+    writer.write_fmt(args).unwrap();
 }
 
 #[unsafe(no_mangle)]
-#[unsafe(link_section = ".text.boot")]
-pub extern "C" fn boot() -> ! {
+#[unsafe(link_section = ".text._start")]
+pub extern "C" fn _start() {
+    // スタックポインタの初期化
+    unsafe {
+        asm!(
+            "mv sp, {0}",
+            in(reg) &__stack_top as *const u8 as usize,
+        );
+    }
+
+    // .bssセクションは初期化されていないグローバル変数が置かれる
+    // コンパイラは0であることを想定しているため0でクリアする
     unsafe {
         let start = &raw const __bss as *const u8;
         let end = &__bss_end as *const u8;
         let size = end.offset_from(start) as usize;
-        memset(start as *mut u8, 0xff, size);
+        memset(start as *mut u8, 0, size);
     }
-    
-    let msg = b"Hello World!\n";
-    msg.into_iter().for_each(|c| write(*c));
 
+    unsafe {
+        println!("\nEntry kernel _start()");
+        println!("Kernel stack top (pys)\t: {:p}", &__stack_top as *const u8);
+    }
+
+    main();
+}
+
+fn main() {
     unsafe {
         loop {
             asm!("wfi", options(nomem, nostack, preserves_flags));
