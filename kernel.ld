@@ -1,10 +1,10 @@
-ENTRY(boot)
+ENTRY(_start)
 
 SECTIONS {
     . = 0x80200000;
 
     .text :{
-        KEEP(*(.text.boot));    /* .text.bootを先頭にする */
+        KEEP(*(.text._start));    /* .text._startを先頭にする */
         *(.text .text.*);
     }
 
