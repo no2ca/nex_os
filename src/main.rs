@@ -56,7 +56,6 @@ pub extern "C" fn _start() {
 }
 
 fn main() {
-    panic!();
     unsafe {
         loop {
             asm!("wfi", options(nomem, nostack, preserves_flags));

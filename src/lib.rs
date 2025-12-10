@@ -4,23 +4,29 @@ use ::core::arch::asm;
 struct Writer;
 
 impl Writer {
-    fn write_byte(c: u8) {
-        sbi_call(c as i32, 0, 0, 0, 0, 0, 0, 1);
+    fn write_byte(c: u8) -> Result<(), i32> {
+        let ret = sbi_call(c as i32, 0, 0, 0, 0, 0, 0, 1);
+        if ret.err == 0 {
+            Ok(())
+        } else {
+            Err(ret.err)
+        }
     }
 }
 
 use core::fmt;
 impl fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        s.bytes().for_each(|c| Writer::write_byte(c));
+        s.bytes()
+            .try_for_each(|c| Writer::write_byte(c).map_err(|_| fmt::Error))?;
         Ok(())
     }
 }
 
 #[macro_export]
 macro_rules! println {
-    () => (print!("\n"));
-    ($($arg:tt)*) => (print!("{}\n", format_args!($($arg)*)));
+    () => (let _ =print!("\n"););
+    ($($arg:tt)*) => (let _ = print!("{}\n", format_args!($($arg)*)););
 }
 
 #[macro_export]
@@ -28,10 +34,11 @@ macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
 }
 
-pub fn _print(args: fmt::Arguments) {
+pub fn _print(args: fmt::Arguments) -> Result<(), fmt::Error> {
     use core::fmt::Write;
     let mut writer = Writer;
-    writer.write_fmt(args).unwrap();
+    writer.write_fmt(args)?;
+    Ok(())
 }
 
 fn sbi_call(
