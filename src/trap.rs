@@ -38,13 +38,10 @@ pub fn kernel_entry() {
         "sw s9,  4 * 27(sp)",
         "sw s10, 4 * 28(sp)",
         "sw s11, 4 * 29(sp)",
-
         "csrr a0, sscratch",
         "sw a0, 4 * 30(sp)",
-
         "mv a0, sp",
         "call handle_trap",
-
         "lw ra,  4 * 0(sp)",
         "lw gp,  4 * 1(sp)",
         "lw tp,  4 * 2(sp)",
@@ -86,5 +83,8 @@ pub fn handle_trap(_trap_frame: *const u8) -> ! {
     let scause = read_csr("scause");
     let stval = read_csr("stval");
     let user_pc = read_csr("sepc");
-    panic!("unexpected trap: scause={:x}, stval={:x}, sepc={:x}", scause, stval, user_pc);
+    panic!(
+        "unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
+        scause, stval, user_pc
+    );
 }
