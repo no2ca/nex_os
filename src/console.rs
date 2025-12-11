@@ -1,5 +1,6 @@
-#![no_std]
-use ::core::arch::asm;
+#![allow(dead_code)]
+
+use core::arch::asm;
 
 struct Writer;
 
@@ -23,22 +24,22 @@ impl fmt::Write for Writer {
     }
 }
 
-#[macro_export]
-macro_rules! println {
-    () => (let _ =print!("\n"););
-    ($($arg:tt)*) => (let _ = print!("{}\n", format_args!($($arg)*)););
-}
-
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));
-}
-
 pub fn _print(args: fmt::Arguments) -> Result<(), fmt::Error> {
     use core::fmt::Write;
     let mut writer = Writer;
     writer.write_fmt(args)?;
     Ok(())
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => (crate::console::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    () => (let _ =print!("\n"););
+    ($($arg:tt)*) => (let _ = crate::print!("{}\n", format_args!($($arg)*)););
 }
 
 #[inline(always)]
