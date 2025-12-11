@@ -29,13 +29,13 @@ pub fn _print(args: fmt::Arguments) -> Result<(), fmt::Error> {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => (crate::console::_print(format_args!($($arg)*)));
+    ($($arg:tt)*) => (let _ = crate::console::_print(format_args!($($arg)*)););
 }
 
 #[macro_export]
 macro_rules! println {
     () => (let _ =print!("\n"););
-    ($($arg:tt)*) => (let _ = crate::print!("{}\n", format_args!($($arg)*)););
+    ($($arg:tt)*) => (crate::print!("{}\n", format_args!($($arg)*)););
 }
 
 fn sbi_call(
