@@ -43,6 +43,12 @@ impl Allocator {
                 panic!("out of memory")
             }
             memset(paddr, 0, n * PAGE_SIZE);
+            println!("[alloc_pages]");
+            let free_area = (&__free_ram_end as *const u8).offset_from(self.next_paddr);
+            let ram_size = 64 * 1024 * 1024;
+            let all_pages = ram_size / 4096;
+            println!("\tremaining pages: {} / {}", free_area / PAGE_SIZE as isize, all_pages);
+            println!("\tused (%): {}", ((ram_size - free_area) * 100 / ram_size) + 1);
         }
         paddr
     }
@@ -59,11 +65,11 @@ fn main() {
     let mut allocator = Allocator { 
         next_paddr: unsafe { &__free_ram as *const u8 } 
     };
-    let paddr0 = allocator.alloc_pages(2);
+    let paddr0 = allocator.alloc_pages(1024);
     let paddr1 = allocator.alloc_pages(1);
     println!("alloc_pages(2) test\t: {:p}", paddr0);
     println!("alloc_pages(1) test\t: {:p}", paddr1);
-    if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 2) } == paddr1 {
+    if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
         println!("Page allocation OK");
     }
 
