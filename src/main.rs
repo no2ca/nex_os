@@ -42,9 +42,9 @@ struct Process {
 
 impl Process {
     #[unsafe(no_mangle)]
-    fn new(pid: Pid, state: ProcessState, pc: usize) -> Self {
-        let stack = Stack::new();
-        let regs = Registers::new(stack.ptr as usize, pc);
+    fn new(pid: Pid, state: ProcessState, pc: usize, allocator: &mut Allocator) -> Self {
+        let stack = Stack::new(allocator);
+        let regs = Registers::new(stack.sp as usize, pc);
         Process {
             pid,
             state,
@@ -58,21 +58,26 @@ const STACK_SIZE: usize = 4096 * 2;
 
 #[derive(Debug)]
 struct Stack {
-    stack: [u8; STACK_SIZE],
-    ptr: *mut u8,
+    base: *mut u8,
+    sp: *mut u8,
 }
 
 impl Stack {
-    fn new() -> Self {
-        let mut _stack = Stack {
-            stack: [0; STACK_SIZE],
-            ptr: core::ptr::null_mut(),
+    fn new(allocator: &mut Allocator) -> Self {
+        let pages = STACK_SIZE / PAGE_SIZE;
+        let base = allocator
+            .alloc_pages(pages)
+            .expect("stack allocation failed") as *mut u8;
+        let mut stack = Stack {
+            base,
+            sp: core::ptr::null_mut(),
         };
-        _stack
+        stack.set_ptr();
+        stack
     }
     
     fn set_ptr(&mut self) {
-        unsafe { self.ptr = self.stack.as_ptr().add(STACK_SIZE) as *mut u8; }
+        unsafe { self.sp = self.base.add(STACK_SIZE); }
     }
 }
 
@@ -109,10 +114,10 @@ impl Procs {
     }
 }
 
-fn create_process(procs: &mut Procs, pc: usize) {
+fn create_process(procs: &mut Procs, allocator: &mut Allocator, pc: usize) {
     procs.procs.iter_mut().enumerate()
         .find(|(_, p)| p.is_none())
-        .map(|(i, p)| p.insert(Process::new(Pid(i), ProcessState::Runnable, pc)));
+        .map(|(i, p)| p.insert(Process::new(Pid(i), ProcessState::Runnable, pc, allocator)));
 }
 
 fn dummy() {
@@ -132,22 +137,22 @@ fn main() {
     }
 
     let mut allocator = Allocator::new();
-    // let paddr0 = allocator.alloc_pages(15).unwrap();
-    // let paddr1 = allocator.alloc_pages(15).unwrap();
-    // println!("alloc_pages() test\t: {:p}", paddr0);
-    // println!("alloc_pages(1) test\t: {:p}", paddr1);
-    // if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
-        // println!("Page allocation OK");
-    // }
+    let paddr0 = allocator.alloc_pages(15).unwrap();
+    let paddr1 = allocator.alloc_pages(15).unwrap();
+    println!("alloc_pages() test\t: {:p}", paddr0);
+    println!("alloc_pages(1) test\t: {:p}", paddr1);
+    if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
+        println!("Page allocation OK");
+    }
     
     let mut procs = Procs::init();
     for _ in 0..PROCS_MAX {
-        create_process(&mut procs, dummy as usize);
+        create_process(&mut procs, &mut allocator, dummy as usize);
     }
     for p in &mut procs.procs {
         if let Some(_p) = p {
             _p.stack.set_ptr();
-            println!("pid: {}, ptr: {:p}, pc: {:p}", _p.pid.0, _p.stack.ptr, _p.regs.pc as *const u8);
+            println!("pid: {}, ptr: {:p}, pc: {:p}", _p.pid.0, _p.stack.sp, _p.regs.pc as *const u8);
             println!("p: {:p}", _p as *const _);
         } else {
             println!("None");
