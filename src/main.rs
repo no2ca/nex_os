@@ -8,14 +8,14 @@ mod boot;
 mod console;
 mod csr;
 mod trap;
+mod utils;
 
 use crate::{
     alloc::{__free_ram, Allocator, PAGE_SIZE},
-    console::memset,
     csr::{read_csr, write_csr},
     trap::kernel_entry,
 };
-use core::{arch::asm, panic::PanicInfo};
+use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -33,12 +33,10 @@ fn main() {
         println!("free ram start\t\t: {:p}", &__free_ram);
     }
 
-    let mut allocator = Allocator {
-        next_paddr: unsafe { &__free_ram as *const u8 },
-    };
-    let paddr0 = allocator.alloc_pages(1024);
-    let paddr1 = allocator.alloc_pages(1);
-    println!("alloc_pages(2) test\t: {:p}", paddr0);
+    let mut allocator = Allocator::new();
+    let paddr0 = allocator.alloc_pages(1024).unwrap();
+    let paddr1 = allocator.alloc_pages(1).unwrap();
+    println!("alloc_pages(1024) test\t: {:p}", paddr0);
     println!("alloc_pages(1) test\t: {:p}", paddr1);
     if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
         println!("Page allocation OK");
@@ -49,7 +47,7 @@ fn main() {
         ptr.write_volatile(0x42);
 
         loop {
-            asm!("wfi");
+            core::hint::spin_loop();
         }
     }
 }

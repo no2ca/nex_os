@@ -1,6 +1,15 @@
-use crate::{console::memset, println};
+use crate::println;
+use core::ptr;
 
 pub const PAGE_SIZE: usize = 4096;
+
+#[derive(Debug)]
+pub enum AllocError {
+    OutOfMemory,    // メモリが足りない
+    OverFlow,       // 確保するアドレスの計算でオーバーフローした
+}
+
+pub type AllocResult<T> = Result<T, AllocError>;
 
 unsafe extern "C" {
     pub static __free_ram: u8;
@@ -8,34 +17,37 @@ unsafe extern "C" {
 }
 
 pub struct Allocator {
-    pub(crate) next_paddr: *const u8,
+    next_paddr: *const u8,
 }
 
 impl Allocator {
+    pub fn new() -> Self {
+        Allocator { next_paddr: unsafe { &__free_ram as *const u8 } }
+    }
+
     /// nページ分のメモリを割り当てて、その先頭アドレスを返す
-    pub fn alloc_pages(&mut self, n: usize) -> *const u8 {
+    pub fn alloc_pages(&mut self, n: usize) -> AllocResult<*const u8> {
         let paddr: *mut u8;
         unsafe {
+            let end = &__free_ram_end as *const u8;
             paddr = self.next_paddr as *mut u8;
-            self.next_paddr = self.next_paddr.add(n * PAGE_SIZE);
-            if self.next_paddr > &__free_ram_end as *const u8 {
-                panic!("out of memory")
+            let offset = match n.checked_mul(PAGE_SIZE) {
+                Some(offset) => offset,
+                None => return Err(AllocError::OverFlow)
+            };
+            self.next_paddr = self.next_paddr.add(offset);
+            if self.next_paddr > end {
+                return Err(AllocError::OutOfMemory);
             }
-            memset(paddr, 0, n * PAGE_SIZE);
-            println!("[alloc_pages]");
-            let free_area = (&__free_ram_end as *const u8).offset_from(self.next_paddr);
-            let ram_size = 64 * 1024 * 1024;
-            let all_pages = ram_size / 4096;
+            ptr::write_bytes(paddr, 0, n * PAGE_SIZE);
+            let free_area = (end as usize).saturating_sub(self.next_paddr as usize);
+            let all_pages = 64 * 1024 * 1024 / PAGE_SIZE;
             println!(
-                "\tremaining pages: {} / {}",
-                free_area / PAGE_SIZE as isize,
+                "[alloc_pages] remaining pages\t: {} / {}",
+                free_area / PAGE_SIZE,
                 all_pages
             );
-            println!(
-                "\tused (%): {}",
-                ((ram_size - free_area) * 100 / ram_size) + 1
-            );
         }
-        paddr
+        Ok(paddr)
     }
 }
