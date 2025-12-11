@@ -15,12 +15,110 @@ use crate::{
     csr::{read_csr, write_csr},
     trap::kernel_entry,
 };
-use core::panic::PanicInfo;
+use core::{arch::asm, panic::PanicInfo};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
     loop {}
+}
+
+#[derive(Debug)]
+struct Pid(usize);
+
+#[derive(Debug)]
+enum ProcessState {
+    Unused,
+    Runnable
+}
+
+#[derive(Debug)]
+struct Process {
+    pid: Pid,
+    state: ProcessState,
+    stack: Stack,
+    regs: Registers,
+}
+
+impl Process {
+    #[unsafe(no_mangle)]
+    fn new(pid: Pid, state: ProcessState, pc: usize) -> Self {
+        let stack = Stack::new();
+        let regs = Registers::new(stack.ptr as usize, pc);
+        Process {
+            pid,
+            state,
+            stack,
+            regs,
+        }
+    }
+}
+
+const STACK_SIZE: usize = 4096 * 2;
+
+#[derive(Debug)]
+struct Stack {
+    stack: [u8; STACK_SIZE],
+    ptr: *mut u8,
+}
+
+impl Stack {
+    fn new() -> Self {
+        let mut _stack = Stack {
+            stack: [0; STACK_SIZE],
+            ptr: core::ptr::null_mut(),
+        };
+        _stack
+    }
+    
+    fn set_ptr(&mut self) {
+        unsafe { self.ptr = self.stack.as_ptr().add(STACK_SIZE) as *mut u8; }
+    }
+}
+
+#[derive(Debug)]
+struct Registers {
+    sp: usize,
+    pc: usize,
+    s: [usize; 12], // s0-s11
+}
+
+impl Registers {
+    fn new(sp: usize, pc: usize) -> Self {
+        Self {
+            sp,
+            pc,
+            s: [0; 12],
+        }
+    }
+}
+
+const PROCS_MAX: usize = 8;
+
+#[derive(Debug)]
+struct Procs {
+    procs: [Option<Process>; PROCS_MAX]
+}
+
+impl Procs {
+    #[unsafe(link_section = ".bss")]
+    fn init() -> Self {
+        Self {
+            procs: [const { None }; PROCS_MAX]
+        }
+    }
+}
+
+fn create_process(procs: &mut Procs, pc: usize) {
+    procs.procs.iter_mut().enumerate()
+        .find(|(_, p)| p.is_none())
+        .map(|(i, p)| p.insert(Process::new(Pid(i), ProcessState::Runnable, pc)));
+}
+
+fn dummy() {
+    loop {
+        
+    }
 }
 
 fn main() {
@@ -34,12 +132,32 @@ fn main() {
     }
 
     let mut allocator = Allocator::new();
-    let paddr0 = allocator.alloc_pages(1024).unwrap();
-    let paddr1 = allocator.alloc_pages(1).unwrap();
-    println!("alloc_pages(1024) test\t: {:p}", paddr0);
-    println!("alloc_pages(1) test\t: {:p}", paddr1);
-    if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
-        println!("Page allocation OK");
+    // let paddr0 = allocator.alloc_pages(15).unwrap();
+    // let paddr1 = allocator.alloc_pages(15).unwrap();
+    // println!("alloc_pages() test\t: {:p}", paddr0);
+    // println!("alloc_pages(1) test\t: {:p}", paddr1);
+    // if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
+        // println!("Page allocation OK");
+    // }
+    
+    let mut procs = Procs::init();
+    for _ in 0..PROCS_MAX {
+        create_process(&mut procs, dummy as usize);
+    }
+    for p in &mut procs.procs {
+        if let Some(_p) = p {
+            _p.stack.set_ptr();
+            println!("pid: {}, ptr: {:p}, pc: {:p}", _p.pid.0, _p.stack.ptr, _p.regs.pc as *const u8);
+            println!("p: {:p}", _p as *const _);
+        } else {
+            println!("None");
+        }
+    }
+    
+    unsafe {
+        let sp: usize;
+        asm!("mv {0}, sp", out(reg) sp);
+        println!("sp: {:p}", sp as *const u8);
     }
 
     unsafe {
