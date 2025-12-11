@@ -1,6 +1,7 @@
 use core::arch::asm;
 
-use crate::{memset, println};
+use crate::println;
+use crate::utils::memset;
 
 unsafe extern "C" {
     static mut __bss: u8;
