@@ -3,17 +3,19 @@
 #![allow(non_upper_case_globals)]
 #![feature(naked_functions_rustic_abi)]
 
-mod console;
+mod alloc;
 mod boot;
+mod console;
 mod csr;
 mod trap;
 
-use core::{arch::asm, panic::PanicInfo};
 use crate::{
+    alloc::{__free_ram, Allocator, PAGE_SIZE},
     console::memset,
     csr::{read_csr, write_csr},
     trap::kernel_entry,
 };
+use core::{arch::asm, panic::PanicInfo};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -21,49 +23,18 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
-const PAGE_SIZE: usize = 4096;
-
-unsafe extern "C" {
-    static __free_ram: u8;
-    static __free_ram_end: u8;
-}
-
-struct Allocator {
-    next_paddr: *const u8,
-}
-
-impl Allocator {
-    /// nページ分のメモリを割り当てて、その先頭アドレスを返す
-    fn alloc_pages(&mut self, n: usize) -> *const u8 {
-        let paddr: *mut u8;
-        unsafe {
-            paddr = self.next_paddr as *mut u8;
-            self.next_paddr = self.next_paddr.add(n * PAGE_SIZE);
-            if self.next_paddr > &__free_ram_end as *const u8 {
-                panic!("out of memory")
-            }
-            memset(paddr, 0, n * PAGE_SIZE);
-            println!("[alloc_pages]");
-            let free_area = (&__free_ram_end as *const u8).offset_from(self.next_paddr);
-            let ram_size = 64 * 1024 * 1024;
-            let all_pages = ram_size / 4096;
-            println!("\tremaining pages: {} / {}", free_area / PAGE_SIZE as isize, all_pages);
-            println!("\tused (%): {}", ((ram_size - free_area) * 100 / ram_size) + 1);
-        }
-        paddr
-    }
-}
-
 fn main() {
     println!("kernel_entry\t\t: {:p}", kernel_entry as *const u8);
 
     write_csr("stvec", kernel_entry as usize);
     println!("stvec register\t\t: {:x}", read_csr("stvec"));
-    
-    unsafe { println!("free ram start\t\t: {:p}", &__free_ram); }
-    
-    let mut allocator = Allocator { 
-        next_paddr: unsafe { &__free_ram as *const u8 } 
+
+    unsafe {
+        println!("free ram start\t\t: {:p}", &__free_ram);
+    }
+
+    let mut allocator = Allocator {
+        next_paddr: unsafe { &__free_ram as *const u8 },
     };
     let paddr0 = allocator.alloc_pages(1024);
     let paddr1 = allocator.alloc_pages(1);
