@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+// TODO: Enumで呼び出した方がいい
+
 pub fn read_csr(csr: &str) -> usize {
     let value: usize;
     match csr {

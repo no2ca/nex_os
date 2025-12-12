@@ -52,8 +52,7 @@ impl Process {
                 sp,
                 frame.len(),
             );
-            println!("Process::new pc set at {:p}", sp.offset(0));
-            println!("Process::new pc value {:p}", sp.offset(0).read_volatile() as *const u8); 
+            println!("[proc] pid: {}  sp: {:p}  pc: {:p}", pid.0, sp as *const u8, pc as *const u8);
         }
         Process {
             pid,
@@ -63,7 +62,7 @@ impl Process {
     }
 }
 
-const STACK_SIZE: usize = 4096 * 2;
+const STACK_SIZE: usize = PAGE_SIZE;
 
 #[derive(Debug)]
 struct Stack {
@@ -166,7 +165,7 @@ fn proc_a() {
 }
 
 fn proc_b() {
-    println!("proc_b started");
+    println!("\nproc_b started");
     loop {
         print!("B");
         unsafe {
@@ -183,23 +182,20 @@ static mut sp_b : usize = 0;
 static mut init_sp: usize = 0;
 
 fn main() {
-    println!("kernel_entry\t\t: {:p}", kernel_entry as *const u8);
+    println!("[mem] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
 
     write_csr("stvec", kernel_entry as usize);
-    println!("stvec register\t\t: {:x}", read_csr("stvec"));
+    println!("[reg] stvec register\t\t: {:x}", read_csr("stvec"));
 
     unsafe {
-        println!("free ram start\t\t: {:p}", &__free_ram);
+        println!("[mem] free ram start\t\t: {:p}", &__free_ram);
     }
 
     let mut allocator = Allocator::new();
-    let paddr0 = allocator.alloc_pages(15).unwrap();
-    let paddr1 = allocator.alloc_pages(15).unwrap();
-    println!("alloc_pages() test\t: {:p}", paddr0);
-    println!("alloc_pages(1) test\t: {:p}", paddr1);
-    if unsafe { (&__free_ram as *const u8).add(PAGE_SIZE * 1024) } == paddr1 {
-        println!("Page allocation OK");
-    }
+    let paddr0 = allocator.alloc_pages(2).unwrap();
+    let paddr1 = allocator.alloc_pages(1).unwrap();
+    println!("[alloc] alloc_pages(2)\t\t: {:p}", paddr0);
+    println!("[alloc] alloc_pages(1)\t\t: {:p}", paddr1);
     
     let mut procs = Procs::init();
     unsafe {
@@ -208,15 +204,17 @@ fn main() {
     }
 
 
+    println!("[proc] process list:");
     for p in &mut procs.procs {
         if let Some(_p) = p {
-            println!("pid: {}, sp: {:p}, pc: {:p}", _p.pid.0, _p.stack.sp, unsafe { (_p.stack.sp as *const usize).offset(0).read_volatile() } as *const u8);
+            println!("\tpid={}, sp={:p}, pc={:p}", _p.pid.0, _p.stack.sp, unsafe { (_p.stack.sp as *const usize).offset(0).read_volatile() } as *const u8);
         } else {
-            println!("None");
+            println!("\tNone");
         }
     }
     
     unsafe {
+        println!("[test] switching to proc_a");
         switch_context(&raw mut init_sp, &raw mut sp_a);
     }
 

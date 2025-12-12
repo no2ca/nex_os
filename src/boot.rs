@@ -27,8 +27,8 @@ pub extern "C" fn _start() {
     }
 
     unsafe {
-        println!("\nKernel loaded address\t: {:p}", _start as *const u8);
-        println!("Kernel stack top\t: {:p}", &__stack_top as *const u8);
+        println!("\n[mem] Kernel loaded address\t: {:p}", _start as *const u8);
+        println!("[mem] Kernel stack top\t\t: {:p}", &__stack_top as *const u8);
     }
 
     crate::main();
