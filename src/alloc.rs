@@ -5,8 +5,8 @@ pub const PAGE_SIZE: usize = 4096;
 
 #[derive(Debug)]
 pub enum AllocError {
-    OutOfMemory,    // メモリが足りない
-    OverFlow,       // 確保するアドレスの計算でオーバーフローした
+    OutOfMemory, // メモリが足りない
+    OverFlow,    // 確保するアドレスの計算でオーバーフローした
 }
 
 pub type AllocResult<T> = Result<T, AllocError>;
@@ -22,7 +22,9 @@ pub struct Allocator {
 
 impl Allocator {
     pub fn new() -> Self {
-        Allocator { next_paddr: unsafe { &__free_ram as *const u8 } }
+        Allocator {
+            next_paddr: unsafe { &__free_ram as *const u8 },
+        }
     }
 
     /// nページ分のメモリを割り当てて、その先頭アドレスを返す
@@ -33,20 +35,23 @@ impl Allocator {
             paddr = self.next_paddr as *mut u8;
             let offset = match n.checked_mul(PAGE_SIZE) {
                 Some(offset) => offset,
-                None => return Err(AllocError::OverFlow)
+                None => return Err(AllocError::OverFlow),
             };
             self.next_paddr = self.next_paddr.add(offset);
             if self.next_paddr > end {
                 return Err(AllocError::OutOfMemory);
             }
             ptr::write_bytes(paddr, 0, n * PAGE_SIZE);
-            let free_area = (self.next_paddr as usize).saturating_sub( &__free_ram as *const u8 as usize );
+            let free_area =
+                (self.next_paddr as usize).saturating_sub(&__free_ram as *const u8 as usize);
             let all_pages = 32 * 1024 * 1024 / PAGE_SIZE;
+            println!("[DEBUG] [alloc]");
             println!(
-                "[alloc] pages allocated\t\t: {}/{}",
+                "\tpages allocated\t\t: {}/{}",
                 free_area / PAGE_SIZE,
                 all_pages
             );
+            println!("\tallocated at\t\t: {:p}", paddr);
         }
         Ok(paddr)
     }
