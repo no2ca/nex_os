@@ -17,10 +17,11 @@ use crate::{
     trap::kernel_entry,
 };
 use core::{
-    arch::{asm, naked_asm}, cell::{OnceCell, UnsafeCell}, panic::PanicInfo, ptr::{self, NonNull}, sync::{
-        self,
-        atomic::AtomicPtr,
-    }
+    arch::{asm, naked_asm},
+    cell::UnsafeCell,
+    panic::PanicInfo,
+    ptr::{self, NonNull},
+    sync::{self, atomic::AtomicPtr},
 };
 
 struct SyncUnsafeCell<T>(UnsafeCell<T>);
@@ -30,7 +31,7 @@ impl<T> SyncUnsafeCell<T> {
     const fn new(val: T) -> Self {
         Self(UnsafeCell::new(val))
     }
-    
+
     fn get(&self) -> *mut T {
         self.0.get()
     }
@@ -49,6 +50,7 @@ struct Pid(usize);
 struct Process {
     pid: Pid,
     stack: Stack,
+    saved_sp: StackPointer,
 }
 
 impl Process {
@@ -62,7 +64,11 @@ impl Process {
             "[DEBUG] [Process::init] process {} initialized with pc={:p}, sp={:p}",
             pid.0, pc as *const u8, sp
         );
-        Process { pid, stack }
+        Process {
+            pid,
+            stack,
+            saved_sp: StackPointer(sp),
+        }
     }
 }
 
@@ -82,9 +88,8 @@ impl Stack {
             .alloc_pages(pages)
             .expect("stack allocation failed") as *mut usize;
         // *mut T の add は T の個数で計算されるためキャストしている
-        let sp = unsafe { 
-            (base as *mut u8)
-                .add(STACK_SIZE - REGS_SAVE_COUNT * core::mem::size_of::<usize>())
+        let sp = unsafe {
+            (base as *mut u8).add(STACK_SIZE - REGS_SAVE_COUNT * core::mem::size_of::<usize>())
                 as *mut usize
         };
         Stack {
@@ -94,7 +99,7 @@ impl Stack {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 struct StackPointer(*mut usize);
 
 impl StackPointer {
@@ -118,8 +123,7 @@ impl StackPointerSlot {
 }
 
 const PROCS_MAX: usize = 8;
-static current_proc: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(None);
-static idle_proc: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(None);
+static current_proc: SyncUnsafeCell<Option<NonNull<Process>>> = SyncUnsafeCell::new(None);
 static PROCS: SyncUnsafeCell<Procs> = SyncUnsafeCell::new(Procs {
     procs: [const { None }; PROCS_MAX],
 });
@@ -137,10 +141,7 @@ impl Procs {
     }
 }
 
-fn create_process<'a>(
-    allocator: &mut Allocator,
-    pc: usize,
-) -> &'a mut Process {
+fn create_process<'a>(allocator: &mut Allocator, pc: usize) -> &'a mut Process {
     unsafe {
         PROCS
             .get()
@@ -155,21 +156,49 @@ fn create_process<'a>(
     }
 }
 
-fn yield_proccess() {
-    let next: &mut Process = schedule();
-    if next == unsafe { current_proc.get().as_ref().unwrap().as_ref().unwrap() } {
+fn yield_process() {
+    let prev_ptr = unsafe { *current_proc.get() };
+    let next_ptr = schedule(prev_ptr);
+    let next_proc = unsafe { &mut *next_ptr.as_ptr() };
+    println!("[DEBUG] [sched] next process: {:#?}", next_proc);
+    unsafe {
+        *current_proc.get() = Some(next_ptr);
+    }
+    if prev_ptr.map_or(false, |ptr| ptr == next_ptr) {
         return;
     }
-    let prev = unsafe {
-        current_proc.get().replace(Some(next.clone())).unwrap()
-    };
+
+    let next_slot = StackPointerSlot::new(&mut next_proc.saved_sp).as_const_ptr();
+    let prev_slot = prev_ptr.map(|ptr| {
+        let proc = unsafe { &mut *ptr.as_ptr() };
+        StackPointerSlot::new(&mut proc.saved_sp)
+    });
+    unsafe {
+        match prev_slot {
+            Some(slot) => switch_context(slot, next_slot),
+            None => switch_context(StackPointerSlot::new(&raw mut init_sp), next_slot),
+        }
+    }
 }
 
-fn schedule<'a>() -> &'a mut Process {
-    let procs = unsafe { PROCS.get().as_mut().unwrap() };
-    for p in procs.procs.iter_mut() {
-        if let Some(_p) = p {
-            return _p;
+fn schedule(prev: Option<NonNull<Process>>) -> NonNull<Process> {
+    let procs = unsafe { &mut *PROCS.get() };
+    let start_idx = prev
+        .and_then(|ptr| {
+            let raw = ptr.as_ptr();
+            procs
+                .procs
+                .iter()
+                .position(|p| p.as_ref().map_or(false, |proc| proc as *const _ == raw))
+        })
+        .map(|idx| (idx + 1) % PROCS_MAX)
+        .unwrap_or(0);
+    for offset in 0..PROCS_MAX {
+        let idx = (start_idx + offset) % PROCS_MAX;
+        if let Some(proc) = procs.procs[idx].as_mut() {
+            if proc.pid != Pid(0) {
+                return NonNull::from(proc);
+            }
         }
     }
     panic!("no process to schedule");
@@ -217,13 +246,8 @@ fn proc_a() {
     println!("proc_a started");
     loop {
         print!("A");
-        unsafe {
-            switch_context(
-                StackPointerSlot::new(sp_a.as_ptr() as *mut StackPointer),
-                StackPointerSlot::new(sp_b.as_ptr() as *mut StackPointer).as_const_ptr(),
-            );
-        }
-        for _ in 0..5_000_000 {
+        yield_process();
+        for _ in 0..50_000_000 {
             core::hint::spin_loop();
         }
     }
@@ -234,12 +258,7 @@ fn proc_b() {
     println!("\nproc_b started");
     loop {
         print!("B");
-        unsafe {
-            switch_context(
-                StackPointerSlot::new(sp_b.as_ptr() as *mut StackPointer),
-                StackPointerSlot::new(sp_a.as_ptr() as *mut StackPointer).as_const_ptr(),
-            );
-        }
+        yield_process();
         for _ in 0..5_000_000 {
             core::hint::spin_loop();
         }
@@ -252,7 +271,10 @@ static sp_b: sync::atomic::AtomicPtr<usize> = AtomicPtr::new(ptr::null_mut());
 static mut init_sp: StackPointer = StackPointer::null();
 
 fn main() {
-    println!("[INFO ] [mem] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
+    println!(
+        "[INFO ] [mem] kernel_entry\t\t: {:p}",
+        kernel_entry as *const u8
+    );
 
     write_csr("stvec", kernel_entry as usize);
     println!("[INFO ] [reg] stvec register\t\t: {:#x}", read_csr("stvec"));
@@ -261,12 +283,14 @@ fn main() {
         println!("[INFO ] [mem] free ram start\t\t: {:p}", &__free_ram);
     }
 
+    // アロケータの初期化とメモリ確保のテスト
     let mut allocator = Allocator::new();
     let paddr0 = allocator.alloc_pages(2).unwrap();
     let paddr1 = allocator.alloc_pages(1).unwrap();
     println!("[TEST ] [alloc] alloc_pages(2)\t\t: {:p}", paddr0);
     println!("[TEST ] [alloc] alloc_pages(1)\t\t: {:p}", paddr1);
 
+    // 書き込みできる範囲のテスト
     let ptr_low = 0x80050000 as *mut u8;
     unsafe {
         let val = ptr_low.read_volatile();
@@ -279,21 +303,29 @@ fn main() {
         println!("read from {:p} pointer: {}", ptr_high, val);
     }
 
+    // プロセスの作成とコンテキストスイッチのテスト
+    let idle = create_process(&mut allocator, &raw const init_sp as *const StackPointer as usize);
+    idle.pid = Pid(0);
+    unsafe {
+        *current_proc.get() = Some(NonNull::from(idle));
+    }
     let ps1 = create_process(&mut allocator, proc_a as usize);
     let ps2 = create_process(&mut allocator, proc_b as usize);
-    
-    println!("[DEBUG] [proc] created processes:");
-    println!("\tproc_a: pid={}, pc={:p}, sp={:p}", ps1.pid.0, proc_a as *const u8, ps1.stack.sp);
-    println!("\tproc_b: pid={}, pc={:p}, sp={:p}", ps2.pid.0, proc_b as *const u8, ps2.stack.sp); 
 
-    sp_a.store(
-        ps1.stack.sp.as_ptr(),
-        sync::atomic::Ordering::Relaxed,
-    );
-    sp_b.store(
-        ps2.stack.sp.as_ptr(),
-        sync::atomic::Ordering::Relaxed,
-    );
+    // println!("[DEBUG] [proc] created processes:");
+    // println!(
+    //     "\tproc_a: pid={}, pc={:p}, sp={:p}",
+    //     ps1.pid.0, proc_a as *const u8, ps1.stack.sp
+    // );
+    // println!(
+    //     "\tproc_b: pid={}, pc={:p}, sp={:p}",
+    //     ps2.pid.0, proc_b as *const u8, ps2.stack.sp
+    // );
+
+    sp_a.store(ps1.stack.sp.as_ptr(), sync::atomic::Ordering::Relaxed);
+    sp_b.store(ps2.stack.sp.as_ptr(), sync::atomic::Ordering::Relaxed);
+
+    yield_process();
 
     println!("[DEBUG] [proc] process list:");
     for p in &mut unsafe { PROCS.get().as_mut().unwrap().procs.clone() } {
@@ -310,8 +342,14 @@ fn main() {
     }
 
     unsafe {
-        println!("[DEBUG] [reg] StackPointerSlot(sp_a)={:p}, StackPointer={:p}", &sp_a, sp_a);
-        println!("[DEBUG] [reg] StackPointerSlot(sp_b)={:p}, StackPointer={:p}", &sp_b, sp_b);
+        println!(
+            "[DEBUG] [reg] StackPointerSlot(sp_a)={:p}, StackPointer={:p}",
+            &sp_a, sp_a
+        );
+        println!(
+            "[DEBUG] [reg] StackPointerSlot(sp_b)={:p}, StackPointer={:p}",
+            &sp_b, sp_b
+        );
         println!("[TEST ] [swtch] switching to proc_a");
         // X.as_ptr で X のポインタが返るため参照にする必要はない
         switch_context(
