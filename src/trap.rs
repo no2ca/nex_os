@@ -84,7 +84,7 @@ pub fn handle_trap(_trap_frame: *const u8) -> ! {
     let stval = read_csr("stval");
     let user_pc = read_csr("sepc");
     panic!(
-        "[TRAP] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
+        "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
         scause, stval, user_pc
     );
 }

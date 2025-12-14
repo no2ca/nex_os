@@ -137,7 +137,7 @@ pub fn yield_process() {
     let prev_ptr = unsafe { *current_proc.get() };
     let next_ptr = schedule(prev_ptr);
     let next_proc = unsafe { &mut *next_ptr.as_ptr() };
-    println!("[DEBUG] [sched] next process: {:#?}", next_proc);
+    println!("\n[DEBUG] [sched] next process: \n{:?}", next_proc);
     unsafe {
         *current_proc.get() = Some(next_ptr);
     }

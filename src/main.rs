@@ -18,7 +18,6 @@ use crate::{
     proc::{create_process, yield_process},
     trap::kernel_entry,
 };
-use core::{arch::asm, ptr::NonNull};
 
 fn proc_a() {
     println!("proc_a started");
@@ -56,58 +55,77 @@ fn dump_main_info() {
     }
 }
 
-fn main() {
-    unsafe {
-        write_csr("stvec", kernel_entry as usize);
-    }
-
-    dump_main_info();
-
-    // アロケータの初期化とメモリ確保のテスト
-    let mut allocator = Allocator::new();
-    let paddr0 = allocator.alloc_pages(2).unwrap();
-    let paddr1 = allocator.alloc_pages(1).unwrap();
-    println!("[TEST ] [alloc] alloc_pages(2)\t\t: {:p}", paddr0);
-    println!("[TEST ] [alloc] alloc_pages(1)\t\t: {:p}", paddr1);
-
-    // 書き込みできる範囲のテスト
+/// OpenSBIのメモリ保護機能(PMP)の動作確認用関数
+/// 
+/// 0x80050000 から 0x87ffffff までの範囲が読み取り可能であることを確認する
+fn test_read_limit() {
     let ptr_low = 0x80050000 as *mut u8;
     unsafe {
         let val = ptr_low.read_volatile();
-        println!("read from {:p} pointer: {}", ptr_low, val);
+        println!("[TEST ] [PMP] read from {:p} pointer: {}", ptr_low, val);
     }
 
     let ptr_high = 0x87ffffff as *mut u8;
     unsafe {
         let val = ptr_high.read_volatile();
-        println!("read from {:p} pointer: {}", ptr_high, val);
+        println!("[TEST ] [PMP] read from {:p} pointer: {}", ptr_high, val);
     }
+}
 
-    // プロセスの作成とコンテキストスイッチのテスト
-    create_process(&mut allocator, &raw const init_sp as usize);
-    unsafe {
-        // PROCS から該当プロセスの参照を取り、NonNull を作る
-        let procs = proc::PROCS.get().as_mut().unwrap();
-        let proc_ref = procs.procs[0].as_mut().unwrap();
-        *proc::current_proc.get() = Some(NonNull::from(proc_ref));
-    }
-    create_process(&mut allocator, proc_a as usize);
-    create_process(&mut allocator, proc_b as usize);
+/// allocatorでページを確保するテスト関数
+/// 
+/// 2ページと1ページを確保してアドレスを表示する
+fn test_allocator(allocator: &mut Allocator) {
+    let paddr0 = allocator.alloc_pages(2).unwrap();
+    let paddr1 = allocator.alloc_pages(1).unwrap();
+    println!("[TEST ] [alloc] alloc_pages(2)\t\t: {:p}", paddr0);
+    println!("[TEST ] [alloc] alloc_pages(1)\t\t: {:p}", paddr1);
+}
 
-    yield_process();
+/// プロセスの作成とコンテキストスイッチのテスト関数
+/// 
+/// init_spを持つプロセスとproc_a, proc_bを持つプロセスを作成し, proc_aから実行を開始する
+fn test_proc_switch(allocator: &mut Allocator) {
+    create_process(allocator, &raw const init_sp as usize);
+    create_process(allocator, proc_a as usize);
+    create_process(allocator, proc_b as usize);
+    proc_a();
+}
 
-    unsafe {
-        let sp: usize;
-        asm!("mv {0}, sp", out(reg) sp);
-        println!("sp: {:p}", sp as *const u8);
-    }
-
+/// 未割当メモリへの書き込みを試みるテスト関数
+/// 
+/// 0xdeadbeef アドレスに書き込みを試み, メモリ例外が発生することを確認する
+fn test_memory_exception() {
     unsafe {
         let ptr = 0xdeadbeef as *mut u8;
         ptr.write_volatile(0x42);
+    }
+}
 
-        loop {
-            core::hint::spin_loop();
-        }
+fn main() {
+    unsafe {
+        write_csr("stvec", kernel_entry as usize);
+    }
+
+    // 初期情報の表示
+    dump_main_info();
+
+    // Allocatorの初期化
+    let mut allocator = Allocator::new();
+    
+    // Allocatorのテスト
+    test_allocator(&mut allocator);
+
+    // 読み取りできる範囲のテスト
+    test_read_limit();
+
+    // プロセスの作成とコンテキストスイッチのテスト
+    test_proc_switch(&mut allocator);    
+
+    // 未割当メモリへの書き込みテスト
+    test_memory_exception();
+    
+    loop {
+        core::hint::spin_loop();
     }
 }
