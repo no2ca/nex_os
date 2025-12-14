@@ -34,7 +34,7 @@ pub fn read_csr(csr: &str) -> usize {
     value
 }
 
-pub fn write_csr(csr: &str, value: usize) {
+pub unsafe fn write_csr(csr: &str, value: usize) {
     match csr {
         "stvec" => unsafe {
             asm!(
