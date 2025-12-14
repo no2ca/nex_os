@@ -15,7 +15,7 @@ mod utils;
 use crate::{
     alloc::{__free_ram, Allocator},
     csr::{read_csr, write_csr},
-    proc::{create_process, yield_process},
+    proc::{create_process, dump_process_list, yield_process},
     trap::kernel_entry,
 };
 
@@ -42,7 +42,7 @@ fn proc_b() {
     }
 }
 
-static mut init_sp: proc::StackPointer = proc::StackPointer::null();
+static mut idle_proc: proc::StackPointer = proc::StackPointer::null();
 
 fn dump_main_info() {
     println!(
@@ -86,10 +86,11 @@ fn test_allocator(allocator: &mut Allocator) {
 /// 
 /// init_spを持つプロセスとproc_a, proc_bを持つプロセスを作成し, proc_aから実行を開始する
 fn test_proc_switch(allocator: &mut Allocator) {
-    create_process(allocator, &raw const init_sp as usize);
+    create_process(allocator, &raw const idle_proc as usize);
     create_process(allocator, proc_a as usize);
     create_process(allocator, proc_b as usize);
-    proc_a();
+    dump_process_list();
+    yield_process();
 }
 
 /// 未割当メモリへの書き込みを試みるテスト関数
@@ -103,6 +104,7 @@ fn test_memory_exception() {
 }
 
 fn main() {
+    // stvecにトラップ時のエントリポイントを設定
     unsafe {
         write_csr("stvec", kernel_entry as usize);
     }

@@ -7,7 +7,7 @@ use core::{
 
 use crate::{alloc::Allocator, println};
 
-pub struct SyncUnsafeCell<T>(UnsafeCell<T>);
+struct SyncUnsafeCell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for SyncUnsafeCell<T> {}
 
 impl<T> SyncUnsafeCell<T> {
@@ -15,7 +15,7 @@ impl<T> SyncUnsafeCell<T> {
         Self(UnsafeCell::new(val))
     }
 
-    pub fn get(&self) -> *mut T {
+    fn get(&self) -> *mut T {
         self.0.get()
     }
 }
@@ -30,7 +30,7 @@ fn panic(info: &PanicInfo) -> ! {
 pub struct Pid(usize);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Process {
+struct Process {
     pid: Pid,
     stack: Stack,
     saved_sp: StackPointer,
@@ -106,14 +106,14 @@ impl StackPointerSlot {
 }
 
 const PROCS_MAX: usize = 8;
-pub static current_proc: SyncUnsafeCell<Option<NonNull<Process>>> = SyncUnsafeCell::new(None);
-pub static PROCS: SyncUnsafeCell<Procs> = SyncUnsafeCell::new(Procs {
+static current_proc: SyncUnsafeCell<Option<NonNull<Process>>> = SyncUnsafeCell::new(None);
+static PROCS: SyncUnsafeCell<Procs> = SyncUnsafeCell::new(Procs {
     procs: [const { None }; PROCS_MAX],
 });
 
 #[derive(Debug)]
-pub struct Procs {
-    pub procs: [Option<Process>; PROCS_MAX],
+struct Procs {
+    procs: [Option<Process>; PROCS_MAX],
 }
 
 pub fn create_process(allocator: &mut Allocator, pc: usize) -> Pid {
@@ -153,7 +153,7 @@ pub fn yield_process() {
     unsafe {
         match prev_slot {
             Some(slot) => switch_context(slot, next_slot),
-            None => switch_context(StackPointerSlot::new(&raw mut crate::init_sp), next_slot),
+            None => switch_context(StackPointerSlot::new(&raw mut crate::idle_proc), next_slot),
         }
     }
 }
@@ -179,6 +179,22 @@ fn schedule(prev: Option<NonNull<Process>>) -> NonNull<Process> {
         }
     }
     panic!("no process to schedule");
+}
+
+pub fn dump_process_list() {
+    println!("[DEBUG] [proc] process list:");
+    for p in &mut unsafe { PROCS.get().as_mut().unwrap().procs.clone() } {
+        if let Some(_p) = p {
+            println!(
+                "\tpid={}, sp={:p}, pc={:p}",
+                _p.pid.0,
+                _p.stack.sp,
+                unsafe { _p.stack.sp.offset(0).read_volatile() } as *const u8
+            );
+        } else {
+            println!("\tNone");
+        }
+    }
 }
 
 #[unsafe(naked)]
