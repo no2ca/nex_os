@@ -14,7 +14,7 @@ mod utils;
 
 use crate::{
     alloc::{__free_ram, Allocator},
-    csr::{read_csr, write_csr},
+    csr::{read_csr, write_csr, Csr},
     proc::{create_process, dump_process_list, yield_process},
     trap::kernel_entry,
 };
@@ -49,7 +49,10 @@ fn dump_main_info() {
         "[INFO ] [mem] kernel_entry\t\t: {:p}",
         kernel_entry as *const u8
     );
-    println!("[INFO ] [reg] stvec register\t\t: {:#x}", read_csr("stvec"));
+    println!(
+        "[INFO ] [reg] stvec register\t\t: {:#x}",
+        read_csr(Csr::Stvec)
+    );
     unsafe {
         println!("[INFO ] [mem] free ram start\t\t: {:p}", &__free_ram);
     }
@@ -106,7 +109,7 @@ fn test_memory_exception() {
 fn main() {
     // stvecにトラップ時のエントリポイントを設定
     unsafe {
-        write_csr("stvec", kernel_entry as usize);
+        write_csr(Csr::Stvec, kernel_entry as usize);
     }
 
     // 初期情報の表示
