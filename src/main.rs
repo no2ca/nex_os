@@ -2,6 +2,7 @@
 #![no_main]
 #![allow(non_upper_case_globals)]
 #![feature(naked_functions_rustic_abi)]
+#![feature(unsafe_cell_access)]
 
 mod alloc;
 mod boot;
@@ -16,14 +17,24 @@ use crate::{
     trap::kernel_entry,
 };
 use core::{
-    arch::{asm, naked_asm},
-    panic::PanicInfo,
-    ptr::{self, NonNull},
-    sync::{
+    arch::{asm, naked_asm}, cell::{OnceCell, UnsafeCell}, panic::PanicInfo, ptr::{self, NonNull}, sync::{
         self,
         atomic::AtomicPtr,
-    },
+    }
 };
+
+struct SyncUnsafeCell<T>(UnsafeCell<T>);
+unsafe impl<T> Sync for SyncUnsafeCell<T> {}
+
+impl<T> SyncUnsafeCell<T> {
+    const fn new(val: T) -> Self {
+        Self(UnsafeCell::new(val))
+    }
+    
+    fn get(&self) -> *mut T {
+        self.0.get()
+    }
+}
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -31,10 +42,10 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 struct Pid(usize);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 struct Process {
     pid: Pid,
     stack: Stack,
@@ -48,14 +59,14 @@ impl Process {
             ptr::write_volatile(sp.offset(0), pc);
         }
         println!(
-            "[DEBUG] [proc] process {} initialized with pc={:p}, sp={:p}",
+            "[DEBUG] [Process::init] process {} initialized with pc={:p}, sp={:p}",
             pid.0, pc as *const u8, sp
         );
         Process { pid, stack }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 struct Stack {
     sp: NonNull<usize>,
 }
@@ -83,21 +94,17 @@ impl Stack {
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug, Clone)]
 struct StackPointer(*mut usize);
 
 impl StackPointer {
     const fn null() -> Self {
         Self(ptr::null_mut())
     }
-
-    fn as_ptr(self) -> *mut usize {
-        self.0
-    }
 }
 
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct StackPointerSlot(*mut StackPointer);
 
 impl StackPointerSlot {
@@ -111,6 +118,11 @@ impl StackPointerSlot {
 }
 
 const PROCS_MAX: usize = 8;
+static current_proc: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(None);
+static idle_proc: SyncUnsafeCell<Option<Process>> = SyncUnsafeCell::new(None);
+static PROCS: SyncUnsafeCell<Procs> = SyncUnsafeCell::new(Procs {
+    procs: [const { None }; PROCS_MAX],
+});
 
 #[derive(Debug)]
 struct Procs {
@@ -126,17 +138,41 @@ impl Procs {
 }
 
 fn create_process<'a>(
-    procs: &'a mut Procs,
     allocator: &mut Allocator,
     pc: usize,
 ) -> &'a mut Process {
-    procs
-        .procs
-        .iter_mut()
-        .enumerate()
-        .find(|(_, p)| p.is_none())
-        .map(|(i, p)| p.insert(Process::init(Pid(i), pc, allocator)))
-        .expect("process creation failed")
+    unsafe {
+        PROCS
+            .get()
+            .as_mut()
+            .unwrap()
+            .procs
+            .iter_mut()
+            .enumerate()
+            .find(|(_, p)| p.is_none())
+            .map(|(i, p)| p.insert(Process::init(Pid(i + 1), pc, allocator)))
+            .expect("process creation failed")
+    }
+}
+
+fn yield_proccess() {
+    let next: &mut Process = schedule();
+    if next == unsafe { current_proc.get().as_ref().unwrap().as_ref().unwrap() } {
+        return;
+    }
+    let prev = unsafe {
+        current_proc.get().replace(Some(next.clone())).unwrap()
+    };
+}
+
+fn schedule<'a>() -> &'a mut Process {
+    let procs = unsafe { PROCS.get().as_mut().unwrap() };
+    for p in procs.procs.iter_mut() {
+        if let Some(_p) = p {
+            return _p;
+        }
+    }
+    panic!("no process to schedule");
 }
 
 #[unsafe(naked)]
@@ -243,24 +279,24 @@ fn main() {
         println!("read from {:p} pointer: {}", ptr_high, val);
     }
 
-    let mut procs = Procs::init();
+    let ps1 = create_process(&mut allocator, proc_a as usize);
+    let ps2 = create_process(&mut allocator, proc_b as usize);
+    
+    println!("[DEBUG] [proc] created processes:");
+    println!("\tproc_a: pid={}, pc={:p}, sp={:p}", ps1.pid.0, proc_a as *const u8, ps1.stack.sp);
+    println!("\tproc_b: pid={}, pc={:p}, sp={:p}", ps2.pid.0, proc_b as *const u8, ps2.stack.sp); 
+
     sp_a.store(
-        create_process(&mut procs, &mut allocator, proc_a as usize)
-            .stack
-            .sp
-            .as_ptr(),
+        ps1.stack.sp.as_ptr(),
         sync::atomic::Ordering::Relaxed,
     );
     sp_b.store(
-        create_process(&mut procs, &mut allocator, proc_b as usize)
-            .stack
-            .sp
-            .as_ptr(),
+        ps2.stack.sp.as_ptr(),
         sync::atomic::Ordering::Relaxed,
     );
 
     println!("[DEBUG] [proc] process list:");
-    for p in &mut procs.procs {
+    for p in &mut unsafe { PROCS.get().as_mut().unwrap().procs.clone() } {
         if let Some(_p) = p {
             println!(
                 "\tpid={}, sp={:p}, pc={:p}",
@@ -274,6 +310,8 @@ fn main() {
     }
 
     unsafe {
+        println!("[DEBUG] [reg] StackPointerSlot(sp_a)={:p}, StackPointer={:p}", &sp_a, sp_a);
+        println!("[DEBUG] [reg] StackPointerSlot(sp_b)={:p}, StackPointer={:p}", &sp_b, sp_b);
         println!("[TEST ] [swtch] switching to proc_a");
         // X.as_ptr で X のポインタが返るため参照にする必要はない
         switch_context(
