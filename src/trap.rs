@@ -1,6 +1,6 @@
 use core::arch::naked_asm;
 
-use crate::csr::{read_csr, Csr};
+use crate::csr::{Csr, read_csr};
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
