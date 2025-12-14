@@ -21,7 +21,18 @@ jobs:
       with:
         toolchain: stable
         components: rustfmt
-    - name: Build
-      run: cargo build --verbose
     - name: Format
       run: cargo fmt --all -- --check
+    - name: Install Rust (nightly for build)
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        components: rust-src
+        override: true
+    - name: Build custom target 
+      run: | 
+        cargo build \ 
+        -Z build-std=core,alloc \ 
+        -Z build-std-features=compiler-builtins-mem
+    
+
