@@ -1,47 +1,52 @@
 use core::arch::asm;
 
-// TODO: Enumで呼び出した方がいい
+#[derive(Copy, Clone, Debug)]
+pub enum Csr {
+    Stvec,
+    Scause,
+    Stval,
+    Sepc,
+}
 
-pub fn read_csr(csr: &str) -> usize {
+pub fn read_csr(csr: Csr) -> usize {
     let value: usize;
     match csr {
-        "stvec" => unsafe {
+        Csr::Stvec => unsafe {
             asm!(
                 "csrr {0}, stvec",
                 out(reg) value,
             );
         },
-        "scause" => unsafe {
+        Csr::Scause => unsafe {
             asm!(
                 "csrr {0}, scause",
                 out(reg) value,
             );
         },
-        "stval" => unsafe {
+        Csr::Stval => unsafe {
             asm!(
                 "csrr {0}, stval",
                 out(reg) value,
             );
         },
-        "sepc" => unsafe {
+        Csr::Sepc => unsafe {
             asm!(
                 "csrr {0}, sepc",
                 out(reg) value,
             );
         },
-        _ => panic!("unreachable"),
     }
     value
 }
 
-pub unsafe fn write_csr(csr: &str, value: usize) {
+pub unsafe fn write_csr(csr: Csr, value: usize) {
     match csr {
-        "stvec" => unsafe {
+        Csr::Stvec => unsafe {
             asm!(
                 "csrw stvec, {0}",
                 in(reg) value,
             );
         },
-        _ => panic!("unreachable"),
+        other => panic!("csr {:?} is not writable", other),
     }
 }

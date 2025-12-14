@@ -1,6 +1,6 @@
 use core::arch::naked_asm;
 
-use crate::csr::read_csr;
+use crate::csr::{read_csr, Csr};
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
@@ -80,9 +80,9 @@ pub fn kernel_entry() {
 #[allow(unused)]
 #[unsafe(no_mangle)]
 pub fn handle_trap(_trap_frame: *const u8) -> ! {
-    let scause = read_csr("scause");
-    let stval = read_csr("stval");
-    let user_pc = read_csr("sepc");
+    let scause = read_csr(Csr::Scause);
+    let stval = read_csr(Csr::Stval);
+    let user_pc = read_csr(Csr::Sepc);
     panic!(
         "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
         scause, stval, user_pc
