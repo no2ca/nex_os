@@ -11,6 +11,7 @@ mod csr;
 mod proc;
 mod trap;
 mod utils;
+mod vmem;
 
 use crate::{
     alloc::{__free_ram, Allocator},
