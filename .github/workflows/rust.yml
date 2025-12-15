@@ -29,6 +29,8 @@ jobs:
         toolchain: nightly
         components: rust-src
         override: true
+    - name: Set default toolchain to nightly
+      run: rustup default nightly
     - name: Build custom target 
       run: cargo build -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
     
