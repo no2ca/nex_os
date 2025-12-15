@@ -42,7 +42,7 @@ fn proc_b() {
     }
 }
 
-static mut idle_proc: proc::StackPointer = proc::StackPointer::null();
+static mut idle_proc: proc::KernelStackPointer = proc::KernelStackPointer::null();
 
 fn dump_main_info() {
     println!(

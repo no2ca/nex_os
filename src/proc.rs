@@ -32,14 +32,14 @@ pub struct Pid(usize);
 #[derive(Debug, PartialEq, Clone)]
 struct Process {
     pid: Pid,
-    stack: Stack,
-    saved_sp: StackPointer,
+    kernel_stack: KernelStack,
+    saved_kernel_sp: KernelStackPointer,
 }
 
 impl Process {
     fn init(pid: Pid, pc: usize, allocator: &mut Allocator) -> Self {
-        let stack = Stack::new(allocator);
-        let sp = stack.sp.as_ptr();
+        let kernel_stack = KernelStack::new(allocator);
+        let sp = kernel_stack.top.as_ptr();
         unsafe {
             ptr::write_volatile(sp.offset(0), pc);
         }
@@ -49,21 +49,21 @@ impl Process {
         );
         Process {
             pid,
-            stack,
-            saved_sp: StackPointer(sp),
+            kernel_stack,
+            saved_kernel_sp: KernelStackPointer::new(sp),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Stack {
-    sp: NonNull<usize>,
+struct KernelStack {
+    top: NonNull<usize>,
 }
 
 const STACK_SIZE: usize = 4096;
 const REGS_SAVE_COUNT: usize = 13;
 
-impl Stack {
+impl KernelStack {
     fn new(allocator: &mut Allocator) -> Self {
         // 必要なページ数を計算するときは切り上げが必要
         let pages = STACK_SIZE.div_ceil(crate::alloc::PAGE_SIZE);
@@ -75,33 +75,23 @@ impl Stack {
             (base as *mut u8).add(STACK_SIZE - REGS_SAVE_COUNT * core::mem::size_of::<usize>())
                 as *mut usize
         };
-        Stack {
-            sp: NonNull::new(sp).expect("stack pointer is null"),
+        KernelStack {
+            top: NonNull::new(sp).expect("stack pointer is null"),
         }
     }
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq)]
-pub struct StackPointer(*mut usize);
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KernelStackPointer(*mut usize);
 
-impl StackPointer {
+impl KernelStackPointer {
+    pub const fn new(ptr: *mut usize) -> Self {
+        Self(ptr)
+    }
+
     pub const fn null() -> Self {
         Self(ptr::null_mut())
-    }
-}
-
-#[repr(transparent)]
-#[derive(Clone, Debug)]
-struct StackPointerSlot(*mut StackPointer);
-
-impl StackPointerSlot {
-    const fn new(slot: *mut StackPointer) -> Self {
-        Self(slot)
-    }
-
-    fn as_const_ptr(self) -> *const StackPointer {
-        self.0 as *const StackPointer
     }
 }
 
@@ -145,15 +135,19 @@ pub fn yield_process() {
         return;
     }
 
-    let next_slot = StackPointerSlot::new(&mut next_proc.saved_sp).as_const_ptr();
-    let prev_slot = prev_ptr.map(|ptr| {
-        let proc = unsafe { &mut *ptr.as_ptr() };
-        StackPointerSlot::new(&mut proc.saved_sp)
+    let next_slot = ptr::addr_of!(next_proc.saved_kernel_sp);
+    let prev_slot = prev_ptr.map(|ptr| unsafe {
+        ptr::addr_of_mut!((*ptr.as_ptr()).saved_kernel_sp)
     });
+    println!(
+        "[DEBUG] [proc] prev_slot={:p}, next_slot={:p}",
+        prev_slot.unwrap_or(ptr::null_mut::<KernelStackPointer>()),
+        next_slot
+    );
     unsafe {
         match prev_slot {
             Some(slot) => switch_context(slot, next_slot),
-            None => switch_context(StackPointerSlot::new(&raw mut crate::idle_proc), next_slot),
+            None => switch_context(ptr::addr_of_mut!(crate::idle_proc), next_slot),
         }
     }
 }
@@ -188,8 +182,8 @@ pub fn dump_process_list() {
             println!(
                 "\tpid={}, sp={:p}, pc={:p}",
                 _p.pid.0,
-                _p.stack.sp,
-                unsafe { _p.stack.sp.offset(0).read_volatile() } as *const u8
+                _p.kernel_stack.top.as_ptr(),
+                unsafe { _p.kernel_stack.top.as_ptr().offset(0).read_volatile() } as *const u8
             );
         } else {
             println!("\tNone");
@@ -199,7 +193,10 @@ pub fn dump_process_list() {
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn switch_context(prev_sp: StackPointerSlot, next_sp: *const StackPointer) {
+unsafe extern "C" fn switch_context(
+    prev_sp: *mut KernelStackPointer,
+    next_sp: *const KernelStackPointer,
+) {
     naked_asm!(
         "addi sp, sp, -13 * 8",
         "sd ra,  0  * 8(sp)",
