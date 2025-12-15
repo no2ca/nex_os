@@ -6,7 +6,8 @@ use crate::csr::{Csr, read_csr};
 #[unsafe(no_mangle)]
 pub fn kernel_entry() {
     naked_asm!(
-        "csrw sscratch, sp",
+        // 実行中プロセスのカーネルスタックをsscratchから取り出す
+        "csrrw sp, sscratch, sp",
         "addi sp, sp, -8 * 31",
         "sd ra,  8 * 0(sp)",
         "sd gp,  8 * 1(sp)",
@@ -38,8 +39,14 @@ pub fn kernel_entry() {
         "sd s9,  8 * 27(sp)",
         "sd s10, 8 * 28(sp)",
         "sd s11, 8 * 29(sp)",
+
+        // 例外発生時のspを取り出して保存
         "csrr a0, sscratch",
-        "sd a0, 8 * 30(sp)",
+        "sd a0,  8 * 30(sp)",
+
+        // カーネルスタックを設定し直す
+        "addi a0, sp, 4 * 31",
+        "csrw sscratch, a0",
         "mv a0, sp",
         "call handle_trap",
         "ld ra,  8 * 0(sp)",
