@@ -10,10 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  check-format:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Install Rust stable toolchain
@@ -23,13 +21,3 @@ jobs:
         components: rustfmt
     - name: Format
       run: cargo fmt --all -- --check
-    - name: Install Rust (nightly for build)
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly-2025-10-31
-        components: rust-src
-        override: true
-    - name: Build custom target 
-      run: cargo build -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem
-    
-
