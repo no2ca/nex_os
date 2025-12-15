@@ -4,7 +4,7 @@ use core::{
     ptr::{self, NonNull},
 };
 
-use crate::{alloc::Allocator, println};
+use crate::{alloc::Allocator, csr, println};
 
 struct SyncUnsafeCell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for SyncUnsafeCell<T> {}
@@ -26,24 +26,29 @@ pub struct Pid(usize);
 struct Process {
     pid: Pid,
     kernel_stack: KernelStack,
-    saved_kernel_sp: KernelStackPointer,
+    saved_sp: SavedSp,
 }
 
 impl Process {
     fn init(pid: Pid, pc: usize, allocator: &mut Allocator) -> Self {
         let kernel_stack = KernelStack::new(allocator);
-        let sp = kernel_stack.top.as_ptr();
+        let kernel_stack_top = kernel_stack.top.as_ptr();
         unsafe {
-            ptr::write_volatile(sp.offset(0), pc);
+            ptr::write_volatile(kernel_stack_top.offset(0), pc);
         }
+
         println!(
             "[DEBUG] [Process::init] process {} initialized with pc={:p}, sp={:p}",
-            pid.0, pc as *const u8, sp
+            pid.0, pc as *const u8, kernel_stack_top
         );
+        
+        // 次のプロセスが最初に読み取る領域を設定する
+        let saved_sp = SavedSp::new(kernel_stack_top);
+
         Process {
             pid,
             kernel_stack,
-            saved_kernel_sp: KernelStackPointer::new(sp),
+            saved_sp,
         }
     }
 }
@@ -63,6 +68,7 @@ impl KernelStack {
         let base = allocator
             .alloc_pages(pages)
             .expect("stack allocation failed") as *mut usize;
+
         // *mut T の add は T の個数で計算されるためキャストしている
         let sp = unsafe {
             (base as *mut u8).add(STACK_SIZE - REGS_SAVE_COUNT * core::mem::size_of::<usize>())
@@ -76,9 +82,9 @@ impl KernelStack {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KernelStackPointer(*mut usize);
+pub struct SavedSp(*mut usize);
 
-impl KernelStackPointer {
+impl SavedSp {
     pub const fn new(ptr: *mut usize) -> Self {
         Self(ptr)
     }
@@ -89,54 +95,117 @@ impl KernelStackPointer {
 }
 
 const PROCS_MAX: usize = 8;
-static current_proc: SyncUnsafeCell<Option<NonNull<Process>>> = SyncUnsafeCell::new(None);
-static PROCS: SyncUnsafeCell<Procs> = SyncUnsafeCell::new(Procs {
-    procs: [const { None }; PROCS_MAX],
-});
+
+struct CurrentProc(SyncUnsafeCell<Option<NonNull<Process>>>);
+
+impl CurrentProc {
+    const fn new() -> Self {
+        Self(SyncUnsafeCell::new(None))
+    }
+
+    fn load(&self) -> Option<NonNull<Process>> {
+        unsafe { *self.0.get() }
+    }
+
+    fn store(&self, ptr: Option<NonNull<Process>>) {
+        unsafe { *self.0.get() = ptr }
+    }
+}
+
+static CURRENT: CurrentProc = CurrentProc::new();
 
 #[derive(Debug)]
-struct Procs {
+struct ProcessTable {
     procs: [Option<Process>; PROCS_MAX],
 }
 
-pub fn create_process(allocator: &mut Allocator, pc: usize) -> Pid {
-    unsafe {
-        PROCS
-            .get()
-            .as_mut()
-            .unwrap()
-            .procs
+impl ProcessTable {
+    const fn new() -> Self {
+        Self {
+            procs: [const { None }; PROCS_MAX],
+        }
+    }
+
+    fn insert(&mut self, pc: usize, allocator: &mut Allocator) -> Option<Pid> {
+        self.procs
             .iter_mut()
             .enumerate()
-            .find(|(_, p)| p.is_none())
-            .map(|(i, p)| p.insert(Process::init(Pid(i), pc as usize, allocator)))
-            .expect("process creation failed")
-            .pid
-            .clone()
+            .find(|(_, slot)| slot.is_none())
+            .map(|(i, slot)| {
+                let pid = Pid(i);
+                *slot = Some(Process::init(pid.clone(), pc, allocator));
+                pid
+            })
+    }
+
+    fn find_idx_by_ptr(&self, raw: *const Process) -> Option<usize> {
+        self.procs
+            .iter()
+            .position(|p| p.as_ref().map_or(false, |proc| proc as *const _ == raw))
+    }
+
+    fn next(&mut self, prev: Option<NonNull<Process>>) -> NonNull<Process> {
+        let start_idx = prev
+            .and_then(|ptr| self.find_idx_by_ptr(ptr.as_ptr()))
+            .map(|idx| (idx + 1) % PROCS_MAX)
+            .unwrap_or(0);
+
+        for offset in 0..PROCS_MAX {
+            let idx = (start_idx + offset) % PROCS_MAX;
+            if let Some(proc) = self.procs[idx].as_mut() {
+                if proc.pid != Pid(0) {
+                    return NonNull::from(proc);
+                }
+            }
+        }
+
+        panic!("no process to schedule");
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &Option<Process>> {
+        self.procs.iter()
     }
 }
 
+static PROCS: SyncUnsafeCell<ProcessTable> = SyncUnsafeCell::new(ProcessTable::new());
+
+fn with_procs_mut<R>(f: impl FnOnce(&mut ProcessTable) -> R) -> R {
+    unsafe { f(&mut *PROCS.get()) }
+}
+
+fn with_procs<R>(f: impl FnOnce(&ProcessTable) -> R) -> R {
+    unsafe { f(&*PROCS.get()) }
+}
+
+pub fn create_process(allocator: &mut Allocator, pc: usize) -> Pid {
+    with_procs_mut(|table| {
+        table
+            .insert(pc as usize, allocator)
+            .expect("process creation failed")
+    })
+}
+
 pub fn yield_process() {
-    let prev_ptr = unsafe { *current_proc.get() };
-    let next_ptr = schedule(prev_ptr);
+    let prev_ptr = CURRENT.load();
+    let next_ptr = with_procs_mut(|table| table.next(prev_ptr));
     let next_proc = unsafe { &mut *next_ptr.as_ptr() };
+
     println!("\n[DEBUG] [sched] next process: \n{:?}", next_proc);
-    unsafe {
-        *current_proc.get() = Some(next_ptr);
-    }
+    CURRENT.store(Some(next_ptr));
+
     if prev_ptr.map_or(false, |ptr| ptr == next_ptr) {
         return;
     }
 
-    let next_slot = ptr::addr_of!(next_proc.saved_kernel_sp);
-    let prev_slot = prev_ptr.map(|ptr| unsafe {
-        ptr::addr_of_mut!((*ptr.as_ptr()).saved_kernel_sp)
-    });
+    let next_slot = unsafe { ptr::addr_of!((*next_ptr.as_ptr()).saved_sp) };
+    let prev_slot = prev_ptr.map(|ptr| unsafe { ptr::addr_of_mut!((*ptr.as_ptr()).saved_sp) });
+
     println!(
         "[DEBUG] [proc] prev_slot={:p}, next_slot={:p}",
-        prev_slot.unwrap_or(ptr::null_mut::<KernelStackPointer>()),
+        prev_slot.unwrap_or(ptr::null_mut::<SavedSp>()),
         next_slot
     );
+    
     unsafe {
         match prev_slot {
             Some(slot) => switch_context(slot, next_slot),
@@ -145,50 +214,29 @@ pub fn yield_process() {
     }
 }
 
-fn schedule(prev: Option<NonNull<Process>>) -> NonNull<Process> {
-    let procs = unsafe { &mut *PROCS.get() };
-    let start_idx = prev
-        .and_then(|ptr| {
-            let raw = ptr.as_ptr();
-            procs
-                .procs
-                .iter()
-                .position(|p| p.as_ref().map_or(false, |proc| proc as *const _ == raw))
-        })
-        .map(|idx| (idx + 1) % PROCS_MAX)
-        .unwrap_or(0);
-    for offset in 0..PROCS_MAX {
-        let idx = (start_idx + offset) % PROCS_MAX;
-        if let Some(proc) = procs.procs[idx].as_mut() {
-            if proc.pid != Pid(0) {
-                return NonNull::from(proc);
-            }
-        }
-    }
-    panic!("no process to schedule");
-}
-
 pub fn dump_process_list() {
     println!("[DEBUG] [proc] process list:");
-    for p in &mut unsafe { PROCS.get().as_mut().unwrap().procs.clone() } {
-        if let Some(_p) = p {
-            println!(
-                "\tpid={}, sp={:p}, pc={:p}",
-                _p.pid.0,
-                _p.kernel_stack.top.as_ptr(),
-                unsafe { _p.kernel_stack.top.as_ptr().offset(0).read_volatile() } as *const u8
-            );
-        } else {
-            println!("\tNone");
+    with_procs(|table| {
+        for p in table.iter() {
+            if let Some(proc) = p {
+                println!(
+                    "\tpid={}, sp={:p}, pc={:p}",
+                    proc.pid.0,
+                    proc.kernel_stack.top.as_ptr(),
+                    unsafe { proc.kernel_stack.top.as_ptr().offset(0).read_volatile() } as *const u8
+                );
+            } else {
+                println!("\tNone");
+            }
         }
-    }
+    });
 }
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn switch_context(
-    prev_sp: *mut KernelStackPointer,
-    next_sp: *const KernelStackPointer,
+    prev_sp: *mut SavedSp,
+    next_sp: *const SavedSp,
 ) {
     naked_asm!(
         "addi sp, sp, -13 * 8",

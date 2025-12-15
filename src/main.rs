@@ -19,6 +19,7 @@ use crate::{
     trap::kernel_entry,
 };
 
+#[unsafe(no_mangle)]
 fn proc_a() {
     println!("proc_a started");
     loop {
@@ -42,7 +43,7 @@ fn proc_b() {
     }
 }
 
-static mut idle_proc: proc::KernelStackPointer = proc::KernelStackPointer::null();
+static mut idle_proc: proc::SavedSp = proc::SavedSp::null();
 
 fn dump_main_info() {
     println!(
