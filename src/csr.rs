@@ -6,6 +6,7 @@ pub enum Csr {
     Scause,
     Stval,
     Sepc,
+    Sscratch,
 }
 
 pub fn read_csr(csr: Csr) -> usize {
@@ -35,6 +36,13 @@ pub fn read_csr(csr: Csr) -> usize {
                 out(reg) value,
             );
         },
+
+        Csr::Sscratch => unsafe {
+            asm!(
+                "csrr {0}, sscratch",
+                out(reg) value,
+            );
+        },
     }
     value
 }
@@ -42,6 +50,13 @@ pub fn read_csr(csr: Csr) -> usize {
 pub unsafe fn write_csr(csr: Csr, value: usize) {
     match csr {
         Csr::Stvec => unsafe {
+            asm!(
+                "csrw stvec, {0}",
+                in(reg) value,
+            );
+        },
+
+        Csr::Sscratch => unsafe {
             asm!(
                 "csrw stvec, {0}",
                 in(reg) value,

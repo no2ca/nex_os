@@ -41,7 +41,7 @@ impl Process {
             "[DEBUG] [Process::init] process {} initialized with pc={:p}, sp={:p}",
             pid.0, pc as *const u8, kernel_stack_top
         );
-        
+
         // 次のプロセスが最初に読み取る領域を設定する
         let saved_sp = SavedSp::new(kernel_stack_top);
 
@@ -205,7 +205,11 @@ pub fn yield_process() {
         prev_slot.unwrap_or(ptr::null_mut::<SavedSp>()),
         next_slot
     );
-    
+
+    unsafe {
+        csr::write_csr(csr::Csr::Sscratch, next_slot as usize);
+    }
+
     unsafe {
         match prev_slot {
             Some(slot) => switch_context(slot, next_slot),
@@ -223,7 +227,8 @@ pub fn dump_process_list() {
                     "\tpid={}, sp={:p}, pc={:p}",
                     proc.pid.0,
                     proc.kernel_stack.top.as_ptr(),
-                    unsafe { proc.kernel_stack.top.as_ptr().offset(0).read_volatile() } as *const u8
+                    unsafe { proc.kernel_stack.top.as_ptr().offset(0).read_volatile() }
+                        as *const u8
                 );
             } else {
                 println!("\tNone");
@@ -234,10 +239,7 @@ pub fn dump_process_list() {
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn switch_context(
-    prev_sp: *mut SavedSp,
-    next_sp: *const SavedSp,
-) {
+unsafe extern "C" fn switch_context(prev_sp: *mut SavedSp, next_sp: *const SavedSp) {
     naked_asm!(
         "addi sp, sp, -13 * 8",
         "sd ra,  0  * 8(sp)",
