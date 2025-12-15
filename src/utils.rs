@@ -1,3 +1,12 @@
+use core::panic::PanicInfo;
+use crate::println;
+
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("{}", info);
+    loop {}
+}
+
 #[inline(always)]
 pub unsafe fn memset(mut dst: *mut u8, val: u8, count: usize) {
     for _ in 0..count {

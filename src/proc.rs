@@ -1,7 +1,6 @@
 use core::{
     arch::naked_asm,
     cell::UnsafeCell,
-    panic::PanicInfo,
     ptr::{self, NonNull},
 };
 
@@ -18,12 +17,6 @@ impl<T> SyncUnsafeCell<T> {
     fn get(&self) -> *mut T {
         self.0.get()
     }
-}
-
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    println!("{}", info);
-    loop {}
 }
 
 #[derive(Debug, PartialEq, Clone)]
