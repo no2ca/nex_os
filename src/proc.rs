@@ -238,7 +238,7 @@ pub fn yield_process() {
             "sfence.vma",
             in(reg) vmem::SATP_SV39 | (next_proc.page_table as *const usize as usize) / PAGE_SIZE,
         );
-        csr::write_csr(csr::Csr::Sscratch, next_slot as usize);
+        csr::write_csr(csr::Csr::Sscratch, next_proc.saved_sp.0 as usize);
     }
 
     println!(
