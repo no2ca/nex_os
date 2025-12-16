@@ -1,10 +1,11 @@
 use crate::alloc::{self, PAGE_SIZE};
-use crate::utils::{align_up, is_aligned};
+use crate::println;
+use crate::utils::is_aligned;
 
 const SATP_SV39: usize = 8 << 60;
 const VPN_MASK: usize = 0b1_1111_1111;
 
-enum PageFlags {
+pub enum PageFlags {
     V = 1 << 0,
     R = 1 << 1,
     W = 1 << 2,
@@ -12,8 +13,8 @@ enum PageFlags {
     U = 1 << 4,
 }
 
-fn map_page(
-    table2: &mut [usize; 512],
+pub fn map_page(
+    table2: &mut [usize],
     vaddr: usize,
     paddr: usize,
     flags: usize,
@@ -62,5 +63,7 @@ fn map_page(
 
         core::slice::from_raw_parts_mut(table0_addr as *mut usize, 512)
     };
+    // TODO: A/Dビットの設定
+    // ハードウェアの実装に依存する
     table0[vpn0] = (paddr / PAGE_SIZE) << 10 | flags | PageFlags::V as usize;
 }

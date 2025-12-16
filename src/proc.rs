@@ -1,10 +1,12 @@
 use core::{
-    arch::naked_asm,
-    cell::UnsafeCell,
-    ptr::{self, NonNull},
+    arch::naked_asm, cell::UnsafeCell, ptr::{self, NonNull}
 };
 
-use crate::{alloc::Allocator, csr, println};
+use crate::{alloc::{__free_ram_end, Allocator, PAGE_SIZE}, csr, println, vmem::{self, PageFlags}};
+
+unsafe extern "C" {
+    static __kernel_base: u8;
+}
 
 struct SyncUnsafeCell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for SyncUnsafeCell<T> {}
@@ -27,6 +29,7 @@ struct Process {
     pid: Pid,
     kernel_stack: KernelStack,
     saved_sp: SavedSp,
+    page_table: *mut [usize],
 }
 
 impl Process {
@@ -38,17 +41,32 @@ impl Process {
         }
 
         println!(
-            "[DEBUG] [Process::init] process {} initialized with pc={:p}, sp={:p}",
+            "[Process::init] process {} initialized with pc={:p}, sp={:p}",
             pid.0, pc as *const u8, kernel_stack_top
         );
 
         // 次のプロセスが最初に読み取る領域を設定する
         let saved_sp = SavedSp::new(kernel_stack_top);
 
+        // カーネルのページをマッピングする
+        let page_table_ptr = allocator.alloc_pages(1).expect("Allocation failed!") as *mut usize;
+        let page_table = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
+        let flags = PageFlags::R as usize | PageFlags::W as usize | PageFlags::X as usize;
+
+        let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
+        let end_paddr = unsafe { &__free_ram_end as *const u8 as usize };
+        
+        let mut paddr = start_paddr;
+        while paddr < end_paddr {
+            vmem::map_page(page_table, paddr, paddr, flags, allocator);
+            paddr += PAGE_SIZE;
+        }
+
         Process {
             pid,
             kernel_stack,
             saved_sp,
+            page_table,
         }
     }
 }
@@ -190,7 +208,7 @@ pub fn yield_process() {
     let next_ptr = with_procs_mut(|table| table.next(prev_ptr));
     let next_proc = unsafe { &mut *next_ptr.as_ptr() };
 
-    println!("\n[DEBUG] [sched] next process: \n{:?}", next_proc);
+    println!("\n[sched] next process: \n{:?}", next_proc);
     CURRENT.store(Some(next_ptr));
 
     if prev_ptr.map_or(false, |ptr| ptr == next_ptr) {
@@ -201,7 +219,7 @@ pub fn yield_process() {
     let prev_slot = prev_ptr.map(|ptr| unsafe { ptr::addr_of_mut!((*ptr.as_ptr()).saved_sp) });
 
     println!(
-        "[DEBUG] [proc] prev_slot={:p}, next_slot={:p}",
+        "[proc] prev_slot={:p}, next_slot={:p}",
         prev_slot.unwrap_or(ptr::null_mut::<SavedSp>()),
         next_slot
     );
@@ -219,7 +237,7 @@ pub fn yield_process() {
 }
 
 pub fn dump_process_list() {
-    println!("[DEBUG] [proc] process list:");
+    println!("[proc] process list:");
     with_procs(|table| {
         for p in table.iter() {
             if let Some(proc) = p {

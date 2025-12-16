@@ -2,6 +2,7 @@ ENTRY(_start)
 
 SECTIONS {
     . = 0x80200000;
+    __kernel_base = .;
 
     .text : ALIGN(4) {
         KEEP(*(.text._start));    /* .text._startを先頭にする */
@@ -27,7 +28,7 @@ SECTIONS {
     __stack_top = .;
     
     . += 32 * 1024 * 1024; /* 32MB */
-    . = ALIGN(4096);
+    . = ALIGN(4096); /* Allocatorが4096byte境界で常に返す */
     __free_ram = .;
     . += 32 * 1024 * 1024; /* 32MB */
     __free_ram_end = .;
