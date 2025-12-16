@@ -48,15 +48,15 @@ static mut idle_proc: proc::SavedSp = proc::SavedSp::null();
 
 fn dump_main_info() {
     println!(
-        "[INFO ] [mem] kernel_entry\t\t: {:p}",
+        "[mem] kernel_entry\t\t: {:p}",
         kernel_entry as *const u8
     );
     println!(
-        "[INFO ] [reg] stvec register\t\t: {:#x}",
+        "[reg] stvec register\t\t: {:#x}",
         read_csr(Csr::Stvec)
     );
     unsafe {
-        println!("[INFO ] [mem] free ram start\t\t: {:p}", &__free_ram);
+        println!("[mem] free ram start\t\t: {:p}", &__free_ram);
     }
 }
 

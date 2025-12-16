@@ -45,7 +45,7 @@ impl Allocator {
             let free_area =
                 (self.next_paddr as usize).saturating_sub(&__free_ram as *const u8 as usize);
             let all_pages = 32 * 1024 * 1024 / PAGE_SIZE;
-            println!("[DEBUG] [alloc]");
+            println!("[alloc]");
             println!(
                 "\tpages allocated\t\t: {}/{}",
                 free_area / PAGE_SIZE,

@@ -28,11 +28,11 @@ pub extern "C" fn _start() {
 
     unsafe {
         println!(
-            "\n[INFO ] [mem] Kernel loaded address\t: {:p}",
+            "\n[mem] Kernel loaded address\t: {:p}",
             _start as *const u8
         );
         println!(
-            "[INFO ] [mem] Kernel stack top\t\t: {:p}",
+            "[mem] Kernel stack top\t\t: {:p}",
             &__stack_top as *const u8
         );
     }
