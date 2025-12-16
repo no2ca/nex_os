@@ -2,7 +2,7 @@ use crate::alloc::{self, PAGE_SIZE};
 use crate::println;
 use crate::utils::is_aligned;
 
-const SATP_SV39: usize = 8 << 60;
+pub const SATP_SV39: usize = 8 << 60;
 const VPN_MASK: usize = 0b1_1111_1111;
 
 pub enum PageFlags {

@@ -1,8 +1,14 @@
 use core::{
-    arch::naked_asm, cell::UnsafeCell, ptr::{self, NonNull}
+    arch::{asm, naked_asm},
+    cell::UnsafeCell,
+    ptr::{self, NonNull},
 };
 
-use crate::{alloc::{__free_ram_end, Allocator, PAGE_SIZE}, csr, println, vmem::{self, PageFlags}};
+use crate::{
+    alloc::{__free_ram_end, Allocator, PAGE_SIZE},
+    csr, println,
+    vmem::{self, PageFlags},
+};
 
 unsafe extern "C" {
     static __kernel_base: u8;
@@ -55,7 +61,7 @@ impl Process {
 
         let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
         let end_paddr = unsafe { &__free_ram_end as *const u8 as usize };
-        
+
         let mut paddr = start_paddr;
         while paddr < end_paddr {
             vmem::map_page(page_table, paddr, paddr, flags, allocator);
@@ -208,7 +214,7 @@ pub fn yield_process() {
     let next_ptr = with_procs_mut(|table| table.next(prev_ptr));
     let next_proc = unsafe { &mut *next_ptr.as_ptr() };
 
-    println!("\n[sched] next process: \n{:?}", next_proc);
+    println!("\n[yield] next process: \n{:?}", next_proc);
     CURRENT.store(Some(next_ptr));
 
     if prev_ptr.map_or(false, |ptr| ptr == next_ptr) {
@@ -219,14 +225,26 @@ pub fn yield_process() {
     let prev_slot = prev_ptr.map(|ptr| unsafe { ptr::addr_of_mut!((*ptr.as_ptr()).saved_sp) });
 
     println!(
-        "[proc] prev_slot={:p}, next_slot={:p}",
+        "[yield] prev_slot={:p}, next_slot={:p}",
         prev_slot.unwrap_or(ptr::null_mut::<SavedSp>()),
         next_slot
     );
 
     unsafe {
+        // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
+        asm!(
+            "sfence.vma",
+            "csrw satp, {0}",
+            "sfence.vma",
+            in(reg) vmem::SATP_SV39 | (next_proc.page_table as *const usize as usize) / PAGE_SIZE,
+        );
         csr::write_csr(csr::Csr::Sscratch, next_slot as usize);
     }
+
+    println!(
+        "[yield] next page table 2 set at \t: {:p}",
+        next_proc.page_table
+    );
 
     unsafe {
         match prev_slot {
