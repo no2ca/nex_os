@@ -9,6 +9,7 @@ mod boot;
 mod console;
 mod csr;
 mod proc;
+mod procv2;
 mod trap;
 mod utils;
 mod vmem;
