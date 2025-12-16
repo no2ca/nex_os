@@ -1,8 +1,66 @@
+use crate::alloc::{self, PAGE_SIZE};
+use crate::utils::{align_up, is_aligned};
+
 const SATP_SV39: usize = 8 << 60;
-enum PageField {
+const VPN_MASK: usize = 0b1_1111_1111;
+
+enum PageFlags {
     V = 1 << 0,
     R = 1 << 1,
     W = 1 << 2,
     X = 1 << 3,
     U = 1 << 4,
+}
+
+fn map_page(
+    table2: &mut [usize; 512],
+    vaddr: usize,
+    paddr: usize,
+    flags: usize,
+    alloc: &mut alloc::Allocator,
+) {
+    if !is_aligned(vaddr, PAGE_SIZE) {
+        panic!("vaddr={:p} is not aligned", vaddr as *const u8);
+    }
+
+    if !is_aligned(paddr, PAGE_SIZE) {
+        panic!("paddr={:p} is not aligned", paddr as *const u8);
+    }
+
+    let vpn2 = vaddr >> 30 & VPN_MASK;
+    if table2[vpn2] & PageFlags::V as usize == 0 {
+        // このエントリに対応する2段目のページテーブルが存在しないので作成する
+        let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
+        table2[vpn2] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V as usize;
+    }
+
+    let vpn1 = vaddr >> 21 & VPN_MASK;
+    let table1 = unsafe {
+        // table1のアドレスは [usize; 512] を指しているので *mut usize
+        // 先ほど確保した pt_paddr を使わない理由は, 最初から定義されている場合もあるため
+        let table1_addr = (table2[vpn2] >> 10) * PAGE_SIZE;
+
+        if !is_aligned(table1_addr, PAGE_SIZE) {
+            panic!("table1_addr={:p} is not aligned", table1_addr as *const u8);
+        }
+
+        core::slice::from_raw_parts_mut(table1_addr as *mut usize, 512)
+    };
+    if table1[vpn1] & PageFlags::V as usize == 0 {
+        // このエントリに対応する1段目のページテーブルが存在しないので作成する
+        let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
+        table1[vpn1] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V as usize;
+    }
+
+    let vpn0 = vaddr >> 12 & VPN_MASK;
+    let table0 = unsafe {
+        let table0_addr = (table1[vpn1] >> 10) * PAGE_SIZE;
+
+        if !is_aligned(table0_addr, PAGE_SIZE) {
+            panic!("table0_addr={:p} is not aligned", table0_addr as *const u8);
+        }
+
+        core::slice::from_raw_parts_mut(table0_addr as *mut usize, 512)
+    };
+    table0[vpn0] = (paddr / PAGE_SIZE) << 10 | flags | PageFlags::V as usize;
 }
