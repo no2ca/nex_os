@@ -43,7 +43,7 @@ pub fn kernel_entry() {
         "csrr a0, sscratch",
         "sd a0,  8 * 30(sp)",
         // カーネルスタックを設定し直す
-        "addi a0, sp, 4 * 31",
+        "addi a0, sp, 8 * 31",
         "csrw sscratch, a0",
         "mv a0, sp",
         "call handle_trap",
