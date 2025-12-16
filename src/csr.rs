@@ -58,7 +58,7 @@ pub unsafe fn write_csr(csr: Csr, value: usize) {
 
         Csr::Sscratch => unsafe {
             asm!(
-                "csrw stvec, {0}",
+                "csrw sscratch, {0}",
                 in(reg) value,
             );
         },
