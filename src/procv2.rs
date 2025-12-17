@@ -31,6 +31,7 @@ impl KernelStack {
     /// topはスタックポインタで, 64bitレジスタの値を積むのでusizeのポインタとしている
     #[inline]
     fn top(&self) -> *mut usize {
+        // add() は u8 の要素数で計算されている
         unsafe { self.base.add(self.size) as *mut usize }
     }
 
@@ -109,10 +110,10 @@ impl Process {
 // プロセステーブルの定義
 //
 
-use core::cell::UnsafeCell;
 use core::usize;
+use core::{arch::naked_asm, cell::UnsafeCell};
 
-use crate::println;
+use crate::{alloc, println};
 
 struct ProcessTableCell<T> {
     inner: UnsafeCell<T>,
@@ -132,13 +133,15 @@ impl<T> ProcessTableCell<T> {
         unsafe { &*self.inner.get() }
     }
 
+    /// # Safety
+    /// この参照のライフタイムは検証されない
     #[inline]
     unsafe fn get_mut(&self) -> &mut T {
         unsafe { &mut *self.inner.get() }
     }
 }
 
-const NPROC: usize = 8;
+pub const NPROC: usize = 8;
 
 struct ProcessTable {
     procs: [Process; NPROC],
@@ -152,6 +155,10 @@ impl ProcessTable {
             current: None,
         }
     }
+
+    fn procs_mut(&mut self) -> &mut [Process; 8] {
+        &mut self.procs
+    }
 }
 
 pub fn dump_process_list() {
@@ -159,12 +166,84 @@ pub fn dump_process_list() {
     let ptable = unsafe { PTABLE.get() };
     for proc in ptable.procs.iter() {
         println!(
-            "\tpid={}, state={:?}, kernel_stack_top={:p}, ",
+            "\tpid={}, state={:?}, ra={:p}, sp={:p}",
             proc.pid.as_usize(),
             proc.state,
-            proc.kernel_stack.top()
+            proc.context.ra as *const u8,
+            proc.context.sp as *const u8,
         );
     }
 }
 
 static PTABLE: ProcessTableCell<ProcessTable> = ProcessTableCell::new(ProcessTable::new());
+
+//
+// プロセス管理
+//
+
+pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
+    // プロセステーブルを &mut の参照で取得する
+    // この参照のライフタイムは検証されないので, 複数つくらないようにする
+    let ptable = unsafe { PTABLE.get_mut().procs_mut() };
+
+    // プロセステーブルの中で状態が Unused のうち最初に見つけたものを取得する
+    let (idx, proc) = ptable
+        .iter_mut()
+        .enumerate()
+        .find(|(_, p)| p.state == ProcState::Unused)
+        .expect("create process failed!");
+
+    // カーネルスタック領域の取得
+    let page_count = 1;
+    let kernel_stack_base = allocator
+        .alloc_pages(page_count)
+        .expect("Allocation failed!") as *mut u8;
+    let kernel_stack_size = alloc::PAGE_SIZE * page_count;
+
+    // TODO: インデックスがPidになるのは一時的な実装
+    proc.pid = Pid(idx);
+    proc.state = ProcState::Runnable;
+    proc.kernel_stack.base = kernel_stack_base;
+    proc.kernel_stack.size = kernel_stack_size;
+    proc.context.ra = pc as usize;
+    proc.context.sp = proc.kernel_stack.top() as usize;
+}
+
+//
+// コンテキストスイッチ
+//
+
+#[unsafe(naked)]
+extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
+    naked_asm!(
+        "sd ra, 0(a0)",
+        "sd sp, 8(a0)",
+        "sd s0, 16(a0)",
+        "sd s1, 24(a0)",
+        "sd s2, 32(a0)",
+        "sd s3, 40(a0)",
+        "sd s4, 48(a0)",
+        "sd s5, 56(a0)",
+        "sd s6, 64(a0)",
+        "sd s7, 72(a0)",
+        "sd s8, 80(a0)",
+        "sd s9, 88(a0)",
+        "sd s10, 96(a0)",
+        "sd s11, 104(a0)",
+        "ld ra, 0(a1)",
+        "ld sp, 8(a1)",
+        "ld s0, 16(a1)",
+        "ld s1, 24(a1)",
+        "ld s2, 32(a1)",
+        "ld s3, 40(a1)",
+        "ld s4, 48(a1)",
+        "ld s5, 56(a1)",
+        "ld s6, 64(a1)",
+        "ld s7, 72(a1)",
+        "ld s8, 80(a1)",
+        "ld s9, 88(a1)",
+        "ld s10, 96(a1)",
+        "ld s11, 104(a1)",
+        "ret",
+    );
+}
