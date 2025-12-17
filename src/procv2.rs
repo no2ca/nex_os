@@ -156,8 +156,12 @@ impl ProcessTable {
         }
     }
 
-    fn procs_mut(&mut self) -> &mut [Process; 8] {
+    fn procs_mut(&mut self) -> &mut [Process; NPROC] {
         &mut self.procs
+    }
+
+    fn procs_ref(&self) -> &[Process; NPROC] {
+        &self.procs
     }
 }
 
@@ -246,4 +250,29 @@ extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
         "ld s11, 104(a1)",
         "ret",
     );
+}
+
+static mut N: usize = 0;
+pub fn test_proc_switch() {
+    let procs = unsafe { PTABLE.get_mut().procs_mut() };
+    let n = unsafe { N };
+    let prev_idx = n % 8;
+    let next_idx = (n + 1) % 8;
+    println!("{} th switch", n);
+    println!(
+        "switching to... {:?} -> {:?}",
+        procs[prev_idx].pid, procs[next_idx].pid
+    );
+    if next_idx == 0 {
+        println!("returning to main...");
+    }
+    let prev = &mut procs.get_mut(prev_idx).unwrap().context as *mut Context;
+    let next = &mut procs.get_mut(next_idx).unwrap().context as *mut Context;
+    unsafe {
+        N += 1;
+    }
+    for _ in 0..50_000_000 {
+        core::hint::spin_loop();
+    }
+    switch_context(prev, next);
 }

@@ -121,6 +121,13 @@ fn main() {
     // 読み取りできる範囲のテスト
     test_read_limit();
 
+    // procv2
+    for _ in 0..procv2::NPROC {
+        procv2::create_process(&mut allocator, procv2::test_proc_switch);
+    }
+    procv2::dump_process_list();
+    procv2::test_proc_switch();
+
     // プロセスの作成とコンテキストスイッチのテスト
     test_proc_switch(&mut allocator);
 
