@@ -11,6 +11,13 @@ impl Pid {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+enum ProcState {
+    Unused,
+    Runnable,
+    Running,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct KernelStack {
     base: NonNull<u8>,
@@ -47,6 +54,7 @@ struct Context {
 #[derive(Debug, PartialEq, Clone)]
 struct Process {
     pid: Pid,
+    state: ProcState,
     kernel_stack: KernelStack,
     context: Context,
     page_table: *mut [usize],
