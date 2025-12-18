@@ -145,14 +145,14 @@ pub const NPROC: usize = 8;
 
 struct ProcessTable {
     procs: [Process; NPROC],
-    current: Option<usize>, // 実行中のプロセスへのインデックス
+    current: usize, // 実行中のプロセスへのインデックス
 }
 
 impl ProcessTable {
     const fn new() -> Self {
         Self {
             procs: [const { Process::unused() }; NPROC],
-            current: None,
+            current: 0,
         }
     }
 
@@ -185,13 +185,31 @@ static PTABLE: ProcessTableCell<ProcessTable> = ProcessTableCell::new(ProcessTab
 // プロセス管理
 //
 
+fn schedule() -> Pid {
+    let ptable = unsafe { PTABLE.get_mut() };
+    let cur_idx = ptable.current;
+
+    let procs = &ptable.procs;
+    for i in 0..NPROC {
+        let next_idx = (cur_idx + i + 1) % NPROC;
+        let p = &procs[next_idx];
+        if p.state == ProcState::Runnable && p.pid.as_usize() > 0 {
+            // 実行可能かつ0ではないプロセスが見つかった場合
+            // インデックスを更新してPidを返す
+            ptable.current = next_idx;
+            return p.pid.clone();
+        }
+    }
+    return Pid(0);
+}
+
 pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
     // プロセステーブルを &mut の参照で取得する
     // この参照のライフタイムは検証されないので, 複数つくらないようにする
-    let ptable = unsafe { PTABLE.get_mut().procs_mut() };
+    let procs = unsafe { PTABLE.get_mut().procs_mut() };
 
     // プロセステーブルの中で状態が Unused のうち最初に見つけたものを取得する
-    let (idx, proc) = ptable
+    let (idx, proc) = procs
         .iter_mut()
         .enumerate()
         .find(|(_, p)| p.state == ProcState::Unused)
@@ -254,20 +272,28 @@ extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
 
 static mut N: usize = 0;
 pub fn test_proc_switch() {
-    let procs = unsafe { PTABLE.get_mut().procs_mut() };
+    let prev_idx = unsafe { PTABLE.get().current };
+    let mut next_idx = schedule().as_usize();
+
     let n = unsafe { N };
-    let prev_idx = n % 8;
-    let next_idx = (n + 1) % 8;
     println!("{} th switch", n);
+    if n == NPROC - 1 {
+        next_idx = 0;
+    }
+
+    let procs = unsafe { PTABLE.get_mut().procs_mut() };
     println!(
         "switching to... {:?} -> {:?}",
         procs[prev_idx].pid, procs[next_idx].pid
     );
+
     if next_idx == 0 {
         println!("returning to main...");
     }
+
     let prev = &mut procs.get_mut(prev_idx).unwrap().context as *mut Context;
     let next = &mut procs.get_mut(next_idx).unwrap().context as *mut Context;
+
     unsafe {
         N += 1;
     }

@@ -121,6 +121,14 @@ fn test_read_elf() {
     }
 }
 
+fn test_procv2(allocator: &mut Allocator) {
+    for _ in 0..procv2::NPROC {
+        procv2::create_process(allocator, procv2::test_proc_switch);
+    }
+    procv2::dump_process_list();
+    procv2::test_proc_switch();
+}
+
 fn main() {
     // stvecにトラップ時のエントリポイントを設定
     unsafe {
@@ -143,11 +151,7 @@ fn main() {
     test_read_elf();
 
     // procv2
-    for _ in 0..procv2::NPROC {
-        procv2::create_process(&mut allocator, procv2::test_proc_switch);
-    }
-    procv2::dump_process_list();
-    procv2::test_proc_switch();
+    test_procv2(&mut allocator);
 
     // プロセスの作成とコンテキストスイッチのテスト
     test_proc_switch(&mut allocator);
