@@ -11,7 +11,7 @@ use crate::{
 };
 
 unsafe extern "C" {
-    static __kernel_base: u8;
+    pub static __kernel_base: u8;
 }
 
 struct SyncUnsafeCell<T>(UnsafeCell<T>);

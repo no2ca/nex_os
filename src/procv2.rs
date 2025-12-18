@@ -110,10 +110,12 @@ impl Process {
 // プロセステーブルの定義
 //
 
+use core::arch::asm;
 use core::usize;
 use core::{arch::naked_asm, cell::UnsafeCell};
 
-use crate::{alloc, println};
+use crate::vmem::{self, PageFlags};
+use crate::{alloc, csr, println};
 
 struct ProcessTableCell<T> {
     inner: UnsafeCell<T>,
@@ -203,7 +205,7 @@ static PTABLE: ProcessTableCell<ProcessTable> = ProcessTableCell::new(ProcessTab
 
 /// # Safety
 /// プロセステーブルの指しているインデックスを変える関数
-/// 
+///
 /// 切り替える次のプロセスは可変参照が不要なので参照を返している
 fn schedule<'a>() -> &'a Process {
     let ptable = unsafe { PTABLE.get_mut() };
@@ -252,6 +254,31 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
         .expect("Allocation failed!") as *mut u8;
     let kernel_stack_size = alloc::PAGE_SIZE * page_count;
 
+    // ページテーブルの設定
+    let page_table_ptr = allocator.alloc_pages(1).expect("Allocation failed!") as *mut usize;
+    let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
+    let flags = PageFlags::R as usize | PageFlags::W as usize | PageFlags::X as usize;
+
+    let start_paddr = unsafe { &crate::proc::__kernel_base as *const u8 as usize };
+    let end_paddr = unsafe { &alloc::__free_ram_end as *const u8 as usize };
+    let mut paddr = start_paddr;
+    while paddr < end_paddr {
+        vmem::map_page(page_table, paddr, paddr, flags, allocator);
+        paddr += alloc::PAGE_SIZE;
+    }
+
+    unsafe {
+        // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
+        asm!(
+            "sfence.vma",
+            "csrw satp, {0}",
+            "sfence.vma",
+            in(reg) vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE,
+        );
+        let kernel_stack_top = kernel_stack_base.add(kernel_stack_size) as *mut usize;
+        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
+    }
+
     // TODO: インデックスがPidになるのは一時的な実装
     proc.pid = Pid(idx);
     proc.state = ProcState::Runnable;
@@ -259,6 +286,7 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
     proc.kernel_stack.size = kernel_stack_size;
     proc.context.ra = pc as usize;
     proc.context.sp = proc.kernel_stack.top() as usize;
+    proc.page_table = page_table;
 }
 
 //
