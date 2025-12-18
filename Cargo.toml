@@ -11,5 +11,12 @@ panic = "abort"
 
 [[bin]]
 name = "nex"
+path = "src/main.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "shell"
+path = "user/shell.rs"
 test = false
 bench = false
