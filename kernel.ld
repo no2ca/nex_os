@@ -1,5 +1,6 @@
 ENTRY(_start)
 
+/* TODO: 64bitなのでもしかしたら ALIGN(8) かもしれない */
 SECTIONS {
     . = 0x80200000;
     __kernel_base = .;

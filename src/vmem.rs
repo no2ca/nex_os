@@ -1,5 +1,4 @@
 use crate::alloc::{self, PAGE_SIZE};
-use crate::println;
 use crate::utils::is_aligned;
 
 pub const SATP_SV39: usize = 8 << 60;

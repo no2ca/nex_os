@@ -14,6 +14,8 @@ mod trap;
 mod utils;
 mod vmem;
 
+use core::ptr::read_volatile;
+
 use crate::{
     alloc::{__free_ram, Allocator},
     csr::{Csr, read_csr, write_csr},
@@ -103,6 +105,22 @@ fn test_memory_exception() {
     }
 }
 
+static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
+fn test_read_elf() {
+    println!("shell.elf at {:p}", SHELL_ELF.as_ptr());
+    let n = 16;
+    println!("reading first {}bytes...", n);
+    let sh = SHELL_ELF;
+    for i in 0..n {
+        print!("{:x} ", sh[i]);
+    }
+    print!("\n");
+    unsafe {
+        let ptr = sh.as_ptr().add(23) as *const usize;
+        println!("entry point {:x}", read_volatile(ptr));
+    }
+}
+
 fn main() {
     // stvecにトラップ時のエントリポイントを設定
     unsafe {
@@ -120,6 +138,9 @@ fn main() {
 
     // 読み取りできる範囲のテスト
     test_read_limit();
+
+    // elfファイルを読めるかテスト
+    test_read_elf();
 
     // procv2
     for _ in 0..procv2::NPROC {
