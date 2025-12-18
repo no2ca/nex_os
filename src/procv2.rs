@@ -156,12 +156,28 @@ impl ProcessTable {
         }
     }
 
+    #[inline]
     fn procs_mut(&mut self) -> &mut [Process; NPROC] {
         &mut self.procs
     }
 
+    #[inline]
     fn procs_ref(&self) -> &[Process; NPROC] {
         &self.procs
+    }
+
+    /// # Safety
+    /// この呼び出し前に schedule() など, 内部のインデックスを変える操作を行っていないか
+    #[inline]
+    unsafe fn current_proc_ref(&self) -> &Process {
+        &self.procs[self.current]
+    }
+
+    /// # Safety
+    /// この呼び出し前に schedule() など, 内部のインデックスを変える操作を行っていないか
+    #[inline]
+    unsafe fn current_proc_mut_ref(&mut self) -> &mut Process {
+        &mut self.procs[self.current]
     }
 }
 
@@ -185,7 +201,11 @@ static PTABLE: ProcessTableCell<ProcessTable> = ProcessTableCell::new(ProcessTab
 // プロセス管理
 //
 
-fn schedule() -> Pid {
+/// # Safety
+/// プロセステーブルの指しているインデックスを変える関数
+/// 
+/// 切り替える次のプロセスは可変参照が不要なので参照を返している
+fn schedule<'a>() -> &'a Process {
     let ptable = unsafe { PTABLE.get_mut() };
     let cur_idx = ptable.current;
 
@@ -197,10 +217,20 @@ fn schedule() -> Pid {
             // 実行可能かつ0ではないプロセスが見つかった場合
             // インデックスを更新してPidを返す
             ptable.current = next_idx;
-            return p.pid.clone();
+            return p;
         }
     }
-    return Pid(0);
+    return &procs[0];
+}
+
+fn yield_process() {
+    let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
+    let next_proc = schedule();
+
+    let prev_ctx = &mut prev_proc.context as *mut Context;
+    let next_ctx = &next_proc.context as *const Context;
+    println!("switching ... {:?} -> {:?}", prev_proc.pid, next_proc.pid);
+    switch_context(prev_ctx, next_ctx);
 }
 
 pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
@@ -270,35 +300,9 @@ extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
     );
 }
 
-static mut N: usize = 0;
 pub fn test_proc_switch() {
-    let prev_idx = unsafe { PTABLE.get().current };
-    let mut next_idx = schedule().as_usize();
-
-    let n = unsafe { N };
-    println!("{} th switch", n);
-    if n == NPROC - 1 {
-        next_idx = 0;
-    }
-
-    let procs = unsafe { PTABLE.get_mut().procs_mut() };
-    println!(
-        "switching to... {:?} -> {:?}",
-        procs[prev_idx].pid, procs[next_idx].pid
-    );
-
-    if next_idx == 0 {
-        println!("returning to main...");
-    }
-
-    let prev = &mut procs.get_mut(prev_idx).unwrap().context as *mut Context;
-    let next = &mut procs.get_mut(next_idx).unwrap().context as *mut Context;
-
-    unsafe {
-        N += 1;
-    }
     for _ in 0..50_000_000 {
         core::hint::spin_loop();
     }
-    switch_context(prev, next);
+    yield_process();
 }
