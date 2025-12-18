@@ -1,8 +1,10 @@
-// #![allow(unused)]
-
 //
 // プロセス管理構造体の定義
 //
+
+unsafe extern "C" {
+    static __kernel_base: u8;
+}
 
 #[derive(Debug, PartialEq, Clone)]
 struct Pid(usize);
@@ -18,7 +20,6 @@ impl Pid {
 enum ProcState {
     Unused,
     Runnable,
-    Running,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -259,7 +260,7 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
     let flags = PageFlags::R as usize | PageFlags::W as usize | PageFlags::X as usize;
 
-    let start_paddr = unsafe { &crate::proc::__kernel_base as *const u8 as usize };
+    let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
     let end_paddr = unsafe { &alloc::__free_ram_end as *const u8 as usize };
     let mut paddr = start_paddr;
     while paddr < end_paddr {

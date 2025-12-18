@@ -8,7 +8,6 @@ mod alloc;
 mod boot;
 mod console;
 mod csr;
-mod proc;
 mod procv2;
 mod trap;
 mod utils;
@@ -19,35 +18,8 @@ use core::ptr::read_volatile;
 use crate::{
     alloc::{__free_ram, Allocator},
     csr::{Csr, read_csr, write_csr},
-    proc::{create_process, dump_process_list, yield_process},
     trap::kernel_entry,
 };
-
-#[unsafe(no_mangle)]
-fn proc_a() {
-    println!("proc_a started");
-    loop {
-        print!("A");
-        yield_process();
-        for _ in 0..50_000_000 {
-            core::hint::spin_loop();
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-fn proc_b() {
-    println!("\nproc_b started");
-    loop {
-        print!("B");
-        yield_process();
-        for _ in 0..50_000_000 {
-            core::hint::spin_loop();
-        }
-    }
-}
-
-static mut idle_proc: proc::SavedSp = proc::SavedSp::null();
 
 fn dump_main_info() {
     println!("[mem] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
@@ -64,13 +36,13 @@ fn test_read_limit() {
     let ptr_low = 0x80050000 as *mut u8;
     unsafe {
         let val = ptr_low.read_volatile();
-        println!("[TEST ] [PMP] read from {:p} pointer: {}", ptr_low, val);
+        println!("[PMP] read from {:p} pointer: {}", ptr_low, val);
     }
 
     let ptr_high = 0x87ffffff as *mut u8;
     unsafe {
         let val = ptr_high.read_volatile();
-        println!("[TEST ] [PMP] read from {:p} pointer: {}", ptr_high, val);
+        println!("[PMP] read from {:p} pointer: {}", ptr_high, val);
     }
 }
 
@@ -80,19 +52,8 @@ fn test_read_limit() {
 fn test_allocator(allocator: &mut Allocator) {
     let paddr0 = allocator.alloc_pages(2).unwrap();
     let paddr1 = allocator.alloc_pages(1).unwrap();
-    println!("[TEST ] [alloc] alloc_pages(2)\t\t: {:p}", paddr0);
-    println!("[TEST ] [alloc] alloc_pages(1)\t\t: {:p}", paddr1);
-}
-
-/// プロセスの作成とコンテキストスイッチのテスト関数
-///
-/// init_spを持つプロセスとproc_a, proc_bを持つプロセスを作成し, proc_aから実行を開始する
-fn test_proc_switch(allocator: &mut Allocator) {
-    create_process(allocator, &raw const idle_proc as usize);
-    create_process(allocator, proc_a as usize);
-    create_process(allocator, proc_b as usize);
-    dump_process_list();
-    yield_process();
+    println!("[alloc] alloc_pages(2)\t\t: {:p}", paddr0);
+    println!("[alloc] alloc_pages(1)\t\t: {:p}", paddr1);
 }
 
 /// 未割当メモリへの書き込みを試みるテスト関数
@@ -152,9 +113,6 @@ fn main() {
 
     // procv2
     test_procv2(&mut allocator);
-
-    // プロセスの作成とコンテキストスイッチのテスト
-    test_proc_switch(&mut allocator);
 
     // 未割当メモリへの書き込みテスト
     test_memory_exception();
