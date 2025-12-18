@@ -5,7 +5,11 @@ set -xue
 QEMU=qemu-system-riscv64
 
 cargo fmt --all
-cargo build -r
+
+cargo build -r --bin shell --target user-riscv64gc-unknown-none-elf.json
+cp ./target/user-riscv64gc-unknown-none-elf/release/shell ./shell.elf
+
+cargo build -r --bin nex --target riscv64gc-unknown-none-elf
 cp ./target/riscv64gc-unknown-none-elf/release/nex ./kernel.elf
 
 # QEMUを起動
