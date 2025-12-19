@@ -269,14 +269,15 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
     }
 
     unsafe {
+        // ページングの有効化
         // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
-        asm!(
-            "sfence.vma",
-            "csrw satp, {0}",
-            "sfence.vma",
-            in(reg) vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE,
-        );
-        let kernel_stack_top = kernel_stack_base.add(kernel_stack_size) as *mut usize;
+        let pt_number =
+            vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
+        csr::write_csr(csr::Csr::Satp, pt_number);
+
+        // 割り込み時のカーネルスタックのspの保存
+        // 注意: u8 (1byte) の単位で加算する必要がある
+        let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
         csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
     }
 
