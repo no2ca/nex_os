@@ -20,6 +20,8 @@ use crate::{
     trap::kernel_entry,
 };
 
+pub static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
+
 fn dump_main_info() {
     println!("[mem] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
     println!("[reg] stvec register\t\t: {:#x}", read_csr(Csr::Stvec));
@@ -67,9 +69,8 @@ fn test_memory_exception() {
 
 // procv2のテスト
 fn test_procv2(allocator: &mut Allocator) {
-    for _ in 0..procv2::NPROC {
-        procv2::create_process(allocator, procv2::test_proc_switch);
-    }
+    procv2::create_process(SHELL_ELF, allocator);
+    procv2::create_process(SHELL_ELF, allocator);
     procv2::dump_process_list();
     procv2::test_proc_switch();
 }

@@ -112,11 +112,13 @@ impl Process {
 //
 
 use core::arch::asm;
-use core::usize;
 use core::{arch::naked_asm, cell::UnsafeCell};
+use core::{slice, usize};
 
+use crate::alloc::PAGE_SIZE;
+use crate::utils::is_aligned;
 use crate::vmem::{self, PageFlags};
-use crate::{alloc, csr, println};
+use crate::{alloc, csr, loadelf, println};
 
 struct ProcessTableCell<T> {
     inner: UnsafeCell<T>,
@@ -236,7 +238,12 @@ fn yield_process() {
     switch_context(prev_ctx, next_ctx);
 }
 
-pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
+pub fn create_process(elf_data: &'static [u8], allocator: &mut alloc::Allocator) {
+    let loaded = loadelf::load_elf(elf_data);
+    create_process_from_loaded(loaded, allocator);
+}
+
+fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc::Allocator) {
     // プロセステーブルを &mut の参照で取得する
     // この参照のライフタイムは検証されないので, 複数つくらないようにする
     let procs = unsafe { PTABLE.get_mut().procs_mut() };
@@ -255,17 +262,51 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
         .expect("Allocation failed!") as *mut u8;
     let kernel_stack_size = alloc::PAGE_SIZE * page_count;
 
-    // ページテーブルの設定
-    let page_table_ptr = allocator.alloc_pages(1).expect("Allocation failed!") as *mut usize;
+    // ページテーブルの作成
+    let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
     let flags = PageFlags::R as usize | PageFlags::W as usize | PageFlags::X as usize;
 
+    // カーネル空間をマッピング
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
     let end_paddr = unsafe { &alloc::__free_ram_end as *const u8 as usize };
     let mut paddr = start_paddr;
     while paddr < end_paddr {
         vmem::map_page(page_table, paddr, paddr, flags, allocator);
         paddr += alloc::PAGE_SIZE;
+    }
+
+    // ユーザーのマッピング
+    // TODO: Allocatorが連続領域ではないところを返した場合に対応できない
+    let user_flags = PageFlags::U as usize
+        | PageFlags::R as usize
+        | PageFlags::W as usize
+        | PageFlags::X as usize;
+    for maybe_seg in loaded.loadable_segments.iter() {
+        if let Some(seg) = maybe_seg {
+            // 必要なページ数を計算
+            let pages_num = seg.memsz.div_ceil(alloc::PAGE_SIZE);
+            // マッピング先の領域を取得
+            let mut page_ptr = allocator.alloc_pages(pages_num).unwrap() as *mut u8;
+            let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
+            // ユーザープログラムのデータをコピー
+            // 同じ長さでないとpanicする
+            println!("copying user program dst={:p}", page);
+            page[0..seg.filesz].copy_from_slice(seg.data);
+
+            // TODO: 確保した領域が連続であることを前提にした実装
+            let mut vaddr = seg.vaddr;
+            if !is_aligned(vaddr, PAGE_SIZE) {
+                vaddr = (vaddr & !0xFFF) + PAGE_SIZE;
+            }
+            for _ in 0..pages_num {
+                vmem::map_page(page_table, vaddr, page_ptr as usize, user_flags, allocator);
+                unsafe {
+                    page_ptr = page_ptr.add(alloc::PAGE_SIZE);
+                }
+                vaddr += alloc::PAGE_SIZE;
+            }
+        }
     }
 
     unsafe {
@@ -279,6 +320,9 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
         // 注意: u8 (1byte) の単位で加算する必要がある
         let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
         csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
+
+        // user_entryでsretしたときに最初に飛ぶアドレス
+        csr::write_csr(csr::Csr::Sepc, loaded.entry_point);
     }
 
     // TODO: インデックスがPidになるのは一時的な実装
@@ -286,14 +330,25 @@ pub fn create_process(allocator: &mut alloc::Allocator, pc: fn()) {
     proc.state = ProcState::Runnable;
     proc.kernel_stack.base = kernel_stack_base;
     proc.kernel_stack.size = kernel_stack_size;
-    proc.context.ra = pc as usize;
+    proc.context.ra = user_entry as usize;
     proc.context.sp = proc.kernel_stack.top() as usize;
     proc.page_table = page_table;
 }
 
 //
-// コンテキストスイッチ
+// コンテキストスイッチとユーザーモード切替
 //
+
+const SSTATUS_SPIE: usize = 1 << 5;
+extern "C" fn user_entry() {
+    unsafe {
+        asm!(
+            "csrw sstatus, {0}",
+            "sret",
+            in(reg) SSTATUS_SPIE,
+        );
+    }
+}
 
 #[unsafe(naked)]
 extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
@@ -331,8 +386,6 @@ extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
 }
 
 pub fn test_proc_switch() {
-    for _ in 0..50_000_000 {
-        core::hint::spin_loop();
-    }
+    println!("[test_proc_switch] calling yield_process()...");
     yield_process();
 }
