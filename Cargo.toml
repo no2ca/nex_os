@@ -20,3 +20,6 @@ name = "shell"
 path = "user/shell.rs"
 test = false
 bench = false
+
+[dependencies]
+zerocopy = {version = "0.7", features = ["derive"]}

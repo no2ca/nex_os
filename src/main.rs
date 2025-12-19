@@ -8,12 +8,13 @@ mod alloc;
 mod boot;
 mod console;
 mod csr;
+mod loadelf;
 mod procv2;
 mod trap;
 mod utils;
 mod vmem;
 
-use core::ptr::read_volatile;
+use zerocopy::FromBytes;
 
 use crate::{
     alloc::{__free_ram, Allocator},
@@ -66,22 +67,7 @@ fn test_memory_exception() {
     }
 }
 
-static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
-fn test_read_elf() {
-    println!("shell.elf at {:p}", SHELL_ELF.as_ptr());
-    let n = 16;
-    println!("reading first {}bytes...", n);
-    let sh = SHELL_ELF;
-    for i in 0..n {
-        print!("{:x} ", sh[i]);
-    }
-    print!("\n");
-    unsafe {
-        let ptr = sh.as_ptr().add(23) as *const usize;
-        println!("entry point {:x}", read_volatile(ptr));
-    }
-}
-
+// procv2のテスト
 fn test_procv2(allocator: &mut Allocator) {
     for _ in 0..procv2::NPROC {
         procv2::create_process(allocator, procv2::test_proc_switch);
@@ -109,7 +95,7 @@ fn main() {
     test_read_limit();
 
     // elfファイルを読めるかテスト
-    test_read_elf();
+    loadelf::test_read_elf();
 
     // procv2
     test_procv2(&mut allocator);
