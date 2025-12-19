@@ -14,8 +14,6 @@ mod trap;
 mod utils;
 mod vmem;
 
-use zerocopy::FromBytes;
-
 use crate::{
     alloc::{__free_ram, Allocator},
     csr::{Csr, read_csr, write_csr},

@@ -1,6 +1,10 @@
 use crate::println;
 use zerocopy::{FromBytes, FromZeroes};
 
+//
+// ELFヘッダ, プログラムヘッダの構造体
+//
+
 #[derive(Debug, FromZeroes, FromBytes)]
 #[repr(C)]
 struct Elf64Ehdr {
@@ -33,36 +37,69 @@ struct Elf64Phdr {
     p_align: u64,  /* Segment alignment */
 }
 
-static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
+//
+// ELFヘッダのパースをする
+// create_process_from_loaded() に渡せる形にする
+//
 
-pub fn test_read_elf() {
-    println!("[test_read_elf] shell.elf at {:p}", SHELL_ELF.as_ptr());
-    let ehdr = Elf64Ehdr::read_from_prefix(SHELL_ELF).unwrap();
+// #[derive(Debug, PartialEq)]
+// enum SegmentFlags {
+//     X = 1 << 0,
+//     W = 1 << 1,
+//     R = 1 << 2,
+// }
 
-    println!("ELF header:");
-    let e_entry = ehdr.e_entry;
-    let e_phoff = ehdr.e_phoff;
-    let e_phnum = ehdr.e_phnum;
+#[derive(Debug)]
+struct LoadableSegment {
+    vaddr: usize,
+    data: &'static [u8],
+    memsz: usize,
+}
+
+const SEGMENT_MAX: usize = 12;
+#[derive(Debug)]
+struct LoadedElf {
+    entry_point: usize,
+    loadable_segments: [Option<LoadableSegment>; SEGMENT_MAX],
+}
+
+const PT_LOAD: u32 = 1;
+
+fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
+    let ehdr = Elf64Ehdr::read_from_prefix(elf_data).unwrap();
+
+    println!("Loading ELF header:");
+    let e_entry = ehdr.e_entry as usize;
+    let e_phoff = ehdr.e_phoff as usize;
+    let e_phnum = ehdr.e_phnum as usize;
     println!("\te_entry={:#x}", e_entry);
     println!("\te_phoff={:#x}", e_phoff);
     println!("\te_phnum={:#x}", e_phnum);
 
-    let mut phdr_ptr = &SHELL_ELF[e_phoff as usize..];
+    // TODO: 動的配列が作れるようになったら変える
+    let mut segments = [const { None }; SEGMENT_MAX];
 
+    // TODO: flagsの情報を利用したい
     for i in 0..e_phnum {
-        let phdr = Elf64Phdr::ref_from_prefix(phdr_ptr).unwrap();
+        // プログラムヘッダの情報が入った構造体を作る
+        let ph_start = e_phoff + i * size_of::<Elf64Phdr>();
+        let phdr =
+            Elf64Phdr::read_from_prefix(&elf_data[ph_start..]).expect("read_from_prefix failed!");
 
-        if phdr.p_type != 0x1 {
+        // PT_LOAD のみを収集する
+        if phdr.p_type != PT_LOAD {
             continue;
         }
 
         println!("Program header (PT_LOAD) {}:", i);
+
+        // 変数を取り出す
         let p_type = phdr.p_type;
         let p_flags = phdr.p_flags;
-        let p_offset = phdr.p_offset;
-        let p_vaddr = phdr.p_vaddr;
-        let p_filesz = phdr.p_filesz;
-        let p_memsz = phdr.p_memsz;
+        let p_offset = phdr.p_offset as usize;
+        let p_vaddr = phdr.p_vaddr as usize;
+        let p_filesz = phdr.p_filesz as usize;
+        let p_memsz = phdr.p_memsz as usize;
         println!("\tp_type={:#x}", p_type);
         println!("\tp_flags={:#x}", p_flags);
         println!("\tp_offset={:#x}", p_offset);
@@ -70,6 +107,25 @@ pub fn test_read_elf() {
         println!("\tp_filesz={:#x}", p_filesz);
         println!("\tp_memsz={:#x}", p_memsz);
 
-        phdr_ptr = &phdr_ptr[size_of::<Elf64Phdr>()..];
+        let seg = LoadableSegment {
+            vaddr: p_vaddr,
+            data: &elf_data[p_offset..p_offset + p_filesz],
+            memsz: p_memsz,
+        };
+
+        segments[i] = Some(seg);
     }
+
+    LoadedElf {
+        entry_point: e_entry,
+        loadable_segments: segments,
+    }
+}
+
+static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
+
+pub fn test_read_elf() {
+    println!("[test_read_elf] shell.elf at {:p}", SHELL_ELF.as_ptr());
+    let loaded = load_elf(SHELL_ELF);
+    println!("{:#?}", loaded);
 }
