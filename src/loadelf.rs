@@ -1,4 +1,4 @@
-use crate::println;
+use crate::{SHELL_ELF, println};
 use zerocopy::{FromBytes, FromZeroes};
 
 //
@@ -42,6 +42,9 @@ struct Elf64Phdr {
 // create_process_from_loaded() に渡せる形にする
 //
 
+const PT_LOAD: u32 = 1;
+const SEGMENT_MAX: usize = 12;
+
 // #[derive(Debug, PartialEq)]
 // enum SegmentFlags {
 //     X = 1 << 0,
@@ -50,22 +53,21 @@ struct Elf64Phdr {
 // }
 
 #[derive(Debug)]
-struct LoadableSegment {
-    vaddr: usize,
-    data: &'static [u8],
-    memsz: usize,
+pub struct LoadableSegment {
+    pub vaddr: usize,
+    /// filesz と同じ長さを持つ
+    pub data: &'static [u8],
+    pub filesz: usize,
+    pub memsz: usize,
 }
 
-const SEGMENT_MAX: usize = 12;
 #[derive(Debug)]
-struct LoadedElf {
-    entry_point: usize,
-    loadable_segments: [Option<LoadableSegment>; SEGMENT_MAX],
+pub struct LoadedElf {
+    pub entry_point: usize,
+    pub loadable_segments: [Option<LoadableSegment>; SEGMENT_MAX],
 }
 
-const PT_LOAD: u32 = 1;
-
-fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
+pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
     let ehdr = Elf64Ehdr::read_from_prefix(elf_data).unwrap();
 
     println!("Loading ELF header:");
@@ -110,6 +112,7 @@ fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
         let seg = LoadableSegment {
             vaddr: p_vaddr,
             data: &elf_data[p_offset..p_offset + p_filesz],
+            filesz: p_filesz,
             memsz: p_memsz,
         };
 
@@ -122,10 +125,7 @@ fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
     }
 }
 
-static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
-
 pub fn test_read_elf() {
     println!("[test_read_elf] shell.elf at {:p}", SHELL_ELF.as_ptr());
     let loaded = load_elf(SHELL_ELF);
-    println!("{:#?}", loaded);
 }

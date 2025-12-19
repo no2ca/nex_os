@@ -43,12 +43,13 @@ pub fn read_csr(csr: Csr) -> usize {
 }
 
 /// # Panics
-/// stvec, sscratch, satp 以外のレジスタへ書き込もうとすると panic する
+/// stvec, sscratch, satp, sepc 以外のレジスタへ書き込もうとすると panic する
 #[inline(always)]
 pub unsafe fn write_csr(csr: Csr, value: usize) {
     match csr {
         Csr::Stvec => unsafe { write_csr_asm!("stvec", value) },
         Csr::Sscratch => unsafe { write_csr_asm!("sscratch", value) },
+        Csr::Sepc => unsafe { write_csr_asm!("sepc", value) },
         Csr::Satp => unsafe {
             asm!(
                 "sfence.vma",
