@@ -2,8 +2,6 @@
 #![no_main]
 use core::{arch::asm, panic::PanicInfo};
 
-mod user;
-
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
