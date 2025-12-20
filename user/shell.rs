@@ -13,6 +13,10 @@ unsafe extern "C" {
     static __bss_end: u8;
 }
 
+#[unsafe(link_section = ".bss")]
+#[used]
+static mut _HOGE: [u8; 24] = [0; 24];
+
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.start")]
 pub extern "C" fn start() {
@@ -22,7 +26,9 @@ pub extern "C" fn start() {
             in(reg) &__stack_top as *const u8 as usize,
         );
     }
-
+    unsafe {
+        _HOGE[0] = 1;
+    }
     loop {
         core::hint::spin_loop();
     }
