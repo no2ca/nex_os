@@ -114,14 +114,15 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
         println!("\tp_memsz={:#x}", p_memsz);
 
         // フラグをページテーブルの使うフラグに変換する
+        let seg_flags = SegmentFlags::from_bits_truncate(p_flags);
         let mut page_flags = PageFlags::empty();
-        if p_flags & SegmentFlags::R.bits() == 1 {
+        if seg_flags.contains(SegmentFlags::R) {
             page_flags |= PageFlags::R;
         }
-        if p_flags & SegmentFlags::W.bits() == 1 {
+        if seg_flags.contains(SegmentFlags::W) {
             page_flags |= PageFlags::W;
         }
-        if p_flags & SegmentFlags::X.bits() == 1 {
+        if seg_flags.contains(SegmentFlags::X) {
             page_flags |= PageFlags::X;
         }
 
