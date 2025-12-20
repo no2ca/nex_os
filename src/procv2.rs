@@ -166,6 +166,7 @@ impl ProcessTable {
         &mut self.procs
     }
 
+    #[allow(unused)]
     #[inline]
     fn procs_ref(&self) -> &[Process; NPROC] {
         &self.procs
@@ -173,6 +174,7 @@ impl ProcessTable {
 
     /// # Safety
     /// この呼び出し前に schedule() など, 内部のインデックスを変える操作を行っていないか
+    #[allow(unused)]
     #[inline]
     unsafe fn current_proc_ref(&self) -> &Process {
         &self.procs[self.current]
@@ -265,7 +267,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     // ページテーブルの作成
     let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
-    let flags = PageFlags::R as usize | PageFlags::W as usize | PageFlags::X as usize;
+    let flags = PageFlags::R | PageFlags::W | PageFlags::X;
 
     // カーネル空間をマッピング
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
@@ -278,10 +280,10 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
 
     // ユーザーのマッピング
     // TODO: Allocatorが連続領域ではないところを返した場合に対応できない
-    let user_flags = PageFlags::U as usize
-        | PageFlags::R as usize
-        | PageFlags::W as usize
-        | PageFlags::X as usize;
+    let user_flags = PageFlags::U
+        | PageFlags::R
+        | PageFlags::W
+        | PageFlags::X;
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
             // 必要なページ数を計算

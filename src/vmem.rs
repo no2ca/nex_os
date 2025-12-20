@@ -1,22 +1,27 @@
+use bitflags::bitflags;
+
 use crate::alloc::{self, PAGE_SIZE};
 use crate::utils::is_aligned;
 
 pub const SATP_SV39: usize = 8 << 60;
 const VPN_MASK: usize = 0b1_1111_1111;
 
-pub enum PageFlags {
-    V = 1 << 0,
-    R = 1 << 1,
-    W = 1 << 2,
-    X = 1 << 3,
-    U = 1 << 4,
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct PageFlags: usize {
+        const V = 1 << 0;
+        const R = 1 << 1;
+        const W = 1 << 2;
+        const X = 1 << 3;
+        const U = 1 << 4;
+    }
 }
 
 pub fn map_page(
     table2: &mut [usize],
     vaddr: usize,
     paddr: usize,
-    flags: usize,
+    flags: PageFlags,
     alloc: &mut alloc::Allocator,
 ) {
     if !is_aligned(vaddr, PAGE_SIZE) {
@@ -28,10 +33,10 @@ pub fn map_page(
     }
 
     let vpn2 = vaddr >> 30 & VPN_MASK;
-    if table2[vpn2] & PageFlags::V as usize == 0 {
+    if table2[vpn2] & PageFlags::V.bits() == 0 {
         // このエントリに対応する2段目のページテーブルが存在しないので作成する
         let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
-        table2[vpn2] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V as usize;
+        table2[vpn2] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 
     let vpn1 = vaddr >> 21 & VPN_MASK;
@@ -46,10 +51,10 @@ pub fn map_page(
 
         core::slice::from_raw_parts_mut(table1_addr as *mut usize, 512)
     };
-    if table1[vpn1] & PageFlags::V as usize == 0 {
+    if table1[vpn1] & PageFlags::V.bits() == 0 {
         // このエントリに対応する1段目のページテーブルが存在しないので作成する
         let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
-        table1[vpn1] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V as usize;
+        table1[vpn1] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 
     let vpn0 = vaddr >> 12 & VPN_MASK;
@@ -64,5 +69,5 @@ pub fn map_page(
     };
     // TODO: A/Dビットの設定
     // ハードウェアの実装に依存する
-    table0[vpn0] = (paddr / PAGE_SIZE) << 10 | flags | PageFlags::V as usize;
+    table0[vpn0] = (paddr / PAGE_SIZE) << 10 | flags.bits() | PageFlags::V.bits();
 }
