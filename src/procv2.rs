@@ -112,7 +112,6 @@ impl Process {
 //
 
 use core::arch::asm;
-use core::ops::Add;
 use core::{arch::naked_asm, cell::UnsafeCell};
 use core::{slice, usize};
 
@@ -268,9 +267,43 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     // ページテーブルの作成
     let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
-    let flags = PageFlags::R | PageFlags::W | PageFlags::X;
 
     // カーネル空間をマッピング
+    map_kernel_pages(page_table, allocator);
+
+    // ユーザー空間をマッピング
+    map_user_pages(&loaded, page_table, allocator);
+
+    unsafe {
+        // ページングの有効化
+        // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
+        let pt_number =
+            vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
+        csr::write_csr(csr::Csr::Satp, pt_number);
+
+        // 割り込み時のカーネルスタックのspの保存
+        // WARNING: u8 (1byte) の単位で加算する必要がある
+        let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
+        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
+
+        // user_entryでsretしたときに最初に飛ぶアドレス
+        csr::write_csr(csr::Csr::Sepc, loaded.entry_point);
+    }
+
+    // TODO: インデックスがPidになるのは一時的な実装
+    proc.pid = Pid(idx);
+    proc.state = ProcState::Runnable;
+    proc.kernel_stack.base = kernel_stack_base;
+    proc.kernel_stack.size = kernel_stack_size;
+    proc.context.ra = user_entry as usize;
+    proc.context.sp = proc.kernel_stack.top() as usize;
+    proc.page_table = page_table;
+}
+
+/// カーネル空間のマッピングを行う関数
+/// カーネルの最初からallocatorが確保できる領域の最後までを一対一でマップする
+fn map_kernel_pages(page_table: &mut [usize], allocator: &mut alloc::Allocator) {
+    let flags = PageFlags::R | PageFlags::W | PageFlags::X;
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
     let end_paddr = unsafe { &alloc::__free_ram_end as *const u8 as usize };
     let mut paddr = start_paddr;
@@ -278,9 +311,15 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
         vmem::map_page(page_table, paddr, paddr, flags, allocator);
         paddr += alloc::PAGE_SIZE;
     }
+}
 
-    // ユーザーのマッピング
-    // allocatorが連続した領域を確保してくれることを前提にする
+/// ユーザーのマッピングを行う関数
+/// allocatorが連続した領域を確保してくれることを前提にする
+fn map_user_pages(
+    loaded: &loadelf::LoadedElf,
+    page_table: &mut [usize],
+    allocator: &mut alloc::Allocator,
+) {
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
             // 必要なページ数を計算
@@ -314,31 +353,6 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
             }
         }
     }
-
-    unsafe {
-        // ページングの有効化
-        // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
-        let pt_number =
-            vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
-        csr::write_csr(csr::Csr::Satp, pt_number);
-
-        // 割り込み時のカーネルスタックのspの保存
-        // WARNING: u8 (1byte) の単位で加算する必要がある
-        let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
-        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
-
-        // user_entryでsretしたときに最初に飛ぶアドレス
-        csr::write_csr(csr::Csr::Sepc, loaded.entry_point);
-    }
-
-    // TODO: インデックスがPidになるのは一時的な実装
-    proc.pid = Pid(idx);
-    proc.state = ProcState::Runnable;
-    proc.kernel_stack.base = kernel_stack_base;
-    proc.kernel_stack.size = kernel_stack_size;
-    proc.context.ra = user_entry as usize;
-    proc.context.sp = proc.kernel_stack.top() as usize;
-    proc.page_table = page_table;
 }
 
 //
