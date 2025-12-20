@@ -1,4 +1,5 @@
-use crate::{SHELL_ELF, println};
+use crate::{println, vmem::PageFlags};
+use bitflags::bitflags;
 use zerocopy::{FromBytes, FromZeroes};
 
 //
@@ -45,15 +46,18 @@ struct Elf64Phdr {
 const PT_LOAD: u32 = 1;
 const SEGMENT_MAX: usize = 12;
 
-// #[derive(Debug, PartialEq)]
-// enum SegmentFlags {
-//     X = 1 << 0,
-//     W = 1 << 1,
-//     R = 1 << 2,
-// }
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct SegmentFlags: u32 {
+        const X = 1 << 0;
+        const W = 1 << 1;
+        const R = 1 << 2;
+    }
+}
 
 #[derive(Debug)]
 pub struct LoadableSegment {
+    pub flags: PageFlags,
     pub vaddr: usize,
     /// filesz と同じ長さを持つ
     pub data: &'static [u8],
@@ -109,7 +113,20 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
         println!("\tp_filesz={:#x}", p_filesz);
         println!("\tp_memsz={:#x}", p_memsz);
 
+        // フラグをページテーブルの使うフラグに変換する
+        let mut page_flags = PageFlags::empty();
+        if p_flags & SegmentFlags::R.bits() == 1 {
+            page_flags |= PageFlags::R;
+        }
+        if p_flags & SegmentFlags::W.bits() == 1 {
+            page_flags |= PageFlags::W;
+        }
+        if p_flags & SegmentFlags::X.bits() == 1 {
+            page_flags |= PageFlags::X;
+        }
+
         let seg = LoadableSegment {
+            flags: page_flags,
             vaddr: p_vaddr,
             data: &elf_data[p_offset..p_offset + p_filesz],
             filesz: p_filesz,
