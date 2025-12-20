@@ -6,7 +6,14 @@ Currently WIP.
 
 ## Implemented Features
 
-- Page Allocator (Bump Allocator)
-- Paging (SV39)
-- Context Switch
-- S-mode Trap Handler
+- Memory
+    - Page allocator (bump allocator)
+    - SV39 paging
+- Process
+    - User mode process
+    - Round-robbin scheduler
+    - Context switch (Struct Based)
+    - ELF loader
+- Trap
+    - S-mode Trap Handler
+    - SBI console output
