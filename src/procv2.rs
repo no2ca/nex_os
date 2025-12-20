@@ -112,11 +112,12 @@ impl Process {
 //
 
 use core::arch::asm;
+use core::ops::Add;
 use core::{arch::naked_asm, cell::UnsafeCell};
 use core::{slice, usize};
 
 use crate::alloc::PAGE_SIZE;
-use crate::utils::is_aligned;
+use crate::utils::align_up;
 use crate::vmem::{self, PageFlags};
 use crate::{alloc, csr, loadelf, println};
 
@@ -279,34 +280,37 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     }
 
     // ユーザーのマッピング
-    // TODO: Allocatorが連続領域ではないところを返した場合に対応できない
+    // allocatorが連続した領域を確保してくれることを前提にする
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
             // 必要なページ数を計算
             let pages_num = seg.memsz.div_ceil(alloc::PAGE_SIZE);
 
             // マッピング先の領域を取得
-            let mut page_ptr = allocator.alloc_pages(pages_num).unwrap() as *mut u8;
+            let page_ptr = allocator.alloc_pages(pages_num).unwrap() as *mut u8;
             let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
 
             // ユーザープログラムのデータをコピー
-            // 同じ長さでないとpanicする
-            println!("copying user program dst={:p}", page);
-            page[0..seg.filesz].copy_from_slice(seg.data);
+            println!("[create_process] copying user program dst={:p}", page);
+            // セグメントの先頭がアラインされていない場合に同じ途中からの位置からコピーする
+            let seg_start = seg.vaddr % PAGE_SIZE;
+            // WARNING: 同じ長さでないとpanicする
+            page[seg_start..seg_start + seg.filesz].copy_from_slice(seg.data);
 
-            // TODO: 確保した領域が連続であることを前提にした実装
-            let mut vaddr = seg.vaddr;
-            if !is_aligned(vaddr, PAGE_SIZE) {
-                vaddr = (vaddr & !0xFFF) + PAGE_SIZE;
-            }
-
+            // ユーザーフラグの設定
             let user_flags = PageFlags::U | seg.flags;
-            for _ in 0..pages_num {
-                vmem::map_page(page_table, vaddr, page_ptr as usize, user_flags, allocator);
-                unsafe {
-                    page_ptr = page_ptr.add(alloc::PAGE_SIZE);
-                }
-                vaddr += alloc::PAGE_SIZE;
+
+            // ユーザ空間のマッピング
+            let page_start_paddr = page_ptr as usize;
+            let page_start_vaddr = align_up(seg.vaddr, PAGE_SIZE);
+            println!(
+                "[create_process] mapping vaddr={:#x} to paddr={:#x}, pages_num={}, flag={:?}",
+                page_start_vaddr, page_start_paddr, pages_num, seg.flags
+            );
+            for i in 0..pages_num {
+                let paddr = page_start_paddr + i * PAGE_SIZE;
+                let vaddr = page_start_vaddr + i * PAGE_SIZE;
+                vmem::map_page(page_table, vaddr, paddr, user_flags, allocator);
             }
         }
     }
@@ -319,7 +323,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
         csr::write_csr(csr::Csr::Satp, pt_number);
 
         // 割り込み時のカーネルスタックのspの保存
-        // 注意: u8 (1byte) の単位で加算する必要がある
+        // WARNING: u8 (1byte) の単位で加算する必要がある
         let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
         csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
 
