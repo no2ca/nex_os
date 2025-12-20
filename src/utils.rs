@@ -21,6 +21,7 @@ pub fn is_aligned(addr: usize, align: usize) -> bool {
     addr % align == 0
 }
 
+#[allow(unused)]
 pub fn align_up(addr: usize, align: usize) -> usize {
     if is_aligned(addr, align) {
         addr

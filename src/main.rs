@@ -93,9 +93,6 @@ fn main() {
     // 読み取りできる範囲のテスト
     test_read_limit();
 
-    // elfファイルを読めるかテスト
-    loadelf::test_read_elf();
-
     // procv2
     test_procv2(&mut allocator);
 

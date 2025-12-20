@@ -124,8 +124,3 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
         loadable_segments: segments,
     }
 }
-
-pub fn test_read_elf() {
-    println!("[test_read_elf] shell.elf at {:p}", SHELL_ELF.as_ptr());
-    let loaded = load_elf(SHELL_ELF);
-}
