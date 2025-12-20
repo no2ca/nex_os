@@ -280,17 +280,15 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
 
     // ユーザーのマッピング
     // TODO: Allocatorが連続領域ではないところを返した場合に対応できない
-    let user_flags = PageFlags::U
-        | PageFlags::R
-        | PageFlags::W
-        | PageFlags::X;
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
             // 必要なページ数を計算
             let pages_num = seg.memsz.div_ceil(alloc::PAGE_SIZE);
+
             // マッピング先の領域を取得
             let mut page_ptr = allocator.alloc_pages(pages_num).unwrap() as *mut u8;
             let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
+
             // ユーザープログラムのデータをコピー
             // 同じ長さでないとpanicする
             println!("copying user program dst={:p}", page);
@@ -301,6 +299,8 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
             if !is_aligned(vaddr, PAGE_SIZE) {
                 vaddr = (vaddr & !0xFFF) + PAGE_SIZE;
             }
+
+            let user_flags = PageFlags::U | seg.flags;
             for _ in 0..pages_num {
                 vmem::map_page(page_table, vaddr, page_ptr as usize, user_flags, allocator);
                 unsafe {
