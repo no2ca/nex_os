@@ -72,6 +72,7 @@ pub struct LoadedElf {
 }
 
 pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
+    println!("[load_elf] Loading elf data at {:p}", elf_data);
     let ehdr = Elf64Ehdr::read_from_prefix(elf_data).unwrap();
 
     println!("Loading ELF header:");

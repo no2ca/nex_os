@@ -189,7 +189,7 @@ impl ProcessTable {
 }
 
 pub fn dump_process_list() {
-    println!("[procv2] process list:");
+    println!("[proc] process list:");
     let ptable = unsafe { PTABLE.get() };
     for proc in ptable.procs.iter() {
         println!(
@@ -296,6 +296,8 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     proc.kernel_stack.base = kernel_stack_base;
     proc.kernel_stack.size = kernel_stack_size;
     proc.context.ra = user_entry as usize;
+    // TODO: spにカーネルのスタックポインタを使用するとプロセス起動時に読めてしまう
+    // ユーザにspの設定を任せているので, ぶっちゃけ無くても動く
     proc.context.sp = proc.kernel_stack.top() as usize;
     proc.page_table = page_table;
 }

@@ -20,13 +20,14 @@ use crate::{
     trap::kernel_entry,
 };
 
+#[unsafe(no_mangle)]
 pub static SHELL_ELF: &[u8] = include_bytes!("../shell.elf");
 
 fn dump_main_info() {
-    println!("[mem] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
-    println!("[reg] stvec register\t\t: {:#x}", read_csr(Csr::Stvec));
+    println!("[main_info] kernel_entry\t\t: {:p}", kernel_entry as *const u8);
+    println!("[main_info] stvec register\t\t: {:#x}", read_csr(Csr::Stvec));
     unsafe {
-        println!("[mem] free ram start\t\t: {:p}", &__free_ram);
+        println!("[main_info] free ram start\t\t: {:p}", &__free_ram);
     }
 }
 
@@ -37,13 +38,13 @@ fn test_read_limit() {
     let ptr_low = 0x80050000 as *mut u8;
     unsafe {
         let val = ptr_low.read_volatile();
-        println!("[PMP] read from {:p} pointer: {}", ptr_low, val);
+        println!("[pmp] read from {:p} pointer: {}", ptr_low, val);
     }
 
     let ptr_high = 0x87ffffff as *mut u8;
     unsafe {
         let val = ptr_high.read_volatile();
-        println!("[PMP] read from {:p} pointer: {}", ptr_high, val);
+        println!("[pmp] read from {:p} pointer: {}", ptr_high, val);
     }
 }
 
@@ -68,7 +69,8 @@ fn test_memory_exception() {
 }
 
 // procv2のテスト
-fn test_procv2(allocator: &mut Allocator) {
+fn test_process(allocator: &mut Allocator) {
+    // TODO: initプロセスの実装
     procv2::create_process(SHELL_ELF, allocator);
     procv2::create_process(SHELL_ELF, allocator);
     procv2::dump_process_list();
@@ -93,8 +95,8 @@ fn main() {
     // 読み取りできる範囲のテスト
     test_read_limit();
 
-    // procv2
-    test_procv2(&mut allocator);
+    // プロセスの起動
+    test_process(&mut allocator);
 
     // 未割当メモリへの書き込みテスト
     test_memory_exception();
