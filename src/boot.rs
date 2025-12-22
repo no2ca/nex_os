@@ -27,7 +27,10 @@ pub extern "C" fn _start() {
     }
 
     unsafe {
-        println!("\n[boot] kernel loaded address\t: {:p}", _start as *const u8);
+        println!(
+            "\n[boot] kernel loaded address\t: {:p}",
+            _start as *const u8
+        );
         println!(
             "[boot] kernel stack top\t\t: {:p}",
             &__stack_top as *const u8
