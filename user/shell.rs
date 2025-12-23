@@ -24,10 +24,10 @@ fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
     unsafe {
         asm!(
             "ecall",
-            in("a0") sysno,
-            in("a1") arg0,
-            in("a2") arg1,
-            in("a3") arg2,
+            in("a0") arg0,
+            in("a1") arg1,
+            in("a2") arg2,
+            in("a3") sysno,
             lateout("a0") sysret,
         );
     }
@@ -91,7 +91,7 @@ extern "C" fn start() {
 }
 
 fn main() {
-    println!("hoge");
+    println!("Hello from shell!!");
     loop {
         core::hint::spin_loop();
     }

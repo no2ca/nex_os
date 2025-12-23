@@ -2,10 +2,10 @@
 
 use core::arch::asm;
 
-struct Writer;
+pub struct Writer;
 
 impl Writer {
-    fn write_byte(c: u8) -> Result<(), i32> {
+    pub fn write_byte(c: u8) -> Result<(), i32> {
         let ret = sbi_call(c as i32, 0, 0, 0, 0, 0, 0, 1);
         if ret.err == 0 { Ok(()) } else { Err(ret.err) }
     }
