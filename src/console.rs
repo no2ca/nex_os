@@ -2,6 +2,11 @@
 
 use core::arch::asm;
 
+pub fn read_byte() -> i32 {
+    let ret = sbi_call(0, 0, 0, 0, 0, 0, 0, 2);
+    ret.err
+}
+
 pub struct Writer;
 
 impl Writer {
@@ -38,6 +43,7 @@ macro_rules! println {
     ($($arg:tt)*) => (crate::print!("{}\n", format_args!($($arg)*)););
 }
 
+// TODO: 引数はi32ではなくusizeの方がいいかも
 fn sbi_call(
     arg0: i32,
     arg1: i32,

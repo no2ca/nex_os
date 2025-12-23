@@ -1,8 +1,9 @@
-use crate::console::Writer;
-use zerocopy::{FromBytes, FromZeroes};
+use crate::console::{self, Writer};
+use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 #[allow(unused)]
-#[derive(Debug, Clone, FromZeroes, FromBytes)]
+#[derive(Debug, Clone, FromZeroes, FromBytes, AsBytes)]
+#[repr(C)]
 struct TrapFrame {
     ra: usize,
     gp: usize,
@@ -38,15 +39,26 @@ struct TrapFrame {
 }
 
 const SYS_WRITE_BYTE: usize = 1;
+const SYS_READ_BYTE: usize = 2;
 
-pub fn handle_syscall(trap_frame: *const u8) {
+pub fn handle_syscall(trap_frame: *mut u8) {
     let trap_frame_slice =
-        unsafe { core::slice::from_raw_parts(trap_frame, size_of::<TrapFrame>()) };
+        unsafe { core::slice::from_raw_parts_mut(trap_frame, size_of::<TrapFrame>()) };
 
-    let trap_frame = TrapFrame::read_from_prefix(trap_frame_slice).unwrap();
+    let trap_frame = TrapFrame::mut_from_prefix(trap_frame_slice).unwrap();
     let sysno = trap_frame.a3;
-    if sysno == SYS_WRITE_BYTE {
-        let c = u8::try_from(trap_frame.a0).unwrap();
-        Writer::write_byte(c).unwrap();
+    match sysno {
+        SYS_WRITE_BYTE => {
+            let c = u8::try_from(trap_frame.a0).unwrap();
+            Writer::write_byte(c).unwrap();
+        }
+        SYS_READ_BYTE => loop {
+            let byte = console::read_byte();
+            if byte >= 0 {
+                trap_frame.a0 = byte as usize;
+                break;
+            }
+        },
+        _ => unimplemented!("{}", sysno),
     }
 }

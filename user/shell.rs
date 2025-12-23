@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+use core::arch::naked_asm;
 use core::{arch::asm, panic::PanicInfo};
 
 #[panic_handler]
@@ -18,6 +19,7 @@ unsafe extern "C" {
 //
 
 const SYS_WRITE_BYTE: usize = 1;
+const SYS_READ_BYTE: usize = 2;
 
 fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
     let sysret: isize;
@@ -35,8 +37,13 @@ fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
 }
 
 //
-// コンソール出力
+// コンソール入出力
 //
+
+fn read_byte() -> u8 {
+    let ret = syscall(SYS_READ_BYTE, 0, 0, 0);
+    u8::try_from(ret).unwrap()
+}
 
 struct Writer;
 
@@ -76,22 +83,23 @@ macro_rules! println {
 // シェルのプログラム
 //
 
+#[unsafe(naked)]
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.start")]
 extern "C" fn start() {
     // スタックトップの設定
-    unsafe {
-        asm!(
-            "mv sp, {0}",
-            in(reg) &__stack_top as *const u8 as usize,
-        );
-    }
-
-    main();
+    naked_asm!(
+        "la sp, {stack_top}",
+        "call {main}",
+        stack_top = sym __stack_top,
+        main = sym main,
+    );
 }
 
 fn main() {
     println!("Hello from shell!!");
+    let c = read_byte();
+    println!("{}", c);
     loop {
         core::hint::spin_loop();
     }

@@ -87,7 +87,7 @@ const ECALL_SIZE: usize = 4;
 
 #[allow(unused)]
 #[unsafe(no_mangle)]
-pub extern "C" fn handle_trap(trap_frame: *const u8) {
+pub extern "C" fn handle_trap(trap_frame: *mut u8) {
     let scause = read_csr(Csr::Scause);
     let stval = read_csr(Csr::Stval);
     let user_pc = read_csr(Csr::Sepc);
