@@ -1,6 +1,6 @@
 use core::arch::naked_asm;
 
-use crate::csr::{Csr, read_csr};
+use crate::csr::{self, Csr, read_csr};
 
 #[unsafe(naked)]
 #[unsafe(no_mangle)]
@@ -82,14 +82,27 @@ pub fn kernel_entry() {
     )
 }
 
+const SCAUSE_ECALL: usize = 8;
+const ECALL_SIZE: usize = 4;
+
 #[allow(unused)]
 #[unsafe(no_mangle)]
-pub fn handle_trap(_trap_frame: *const u8) -> ! {
+pub extern "C" fn handle_trap(trap_frame: *const u8) {
     let scause = read_csr(Csr::Scause);
     let stval = read_csr(Csr::Stval);
     let user_pc = read_csr(Csr::Sepc);
-    panic!(
-        "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
-        scause, stval, user_pc
-    );
+
+    if scause == SCAUSE_ECALL {
+        crate::syscall::handle_syscall(trap_frame);
+    } else {
+        panic!(
+            "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
+            scause, stval, user_pc
+        );
+    }
+
+    unsafe {
+        // ecall命令の大きさを足して次の命令から再開する
+        csr::write_csr(Csr::Sepc, user_pc + ECALL_SIZE);
+    }
 }

@@ -10,6 +10,7 @@ mod console;
 mod csr;
 mod loadelf;
 mod procv2;
+mod syscall;
 mod trap;
 mod utils;
 mod vmem;
