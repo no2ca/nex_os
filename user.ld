@@ -20,9 +20,9 @@ SECTIONS {
         *(.bss .bss.* .sbss .sbss.*);
 
         . = ALIGN(16); /* https://github.com/nuta/operating-system-in-1000-lines/pull/23 */
-        . += 64 * 1024; /* 64KB */
+        . += 64 * 1024; 
         __stack_top = .;
-
+        . += 64 * 1024; 
        ASSERT(. < 0x1800000, "too large executable");
     }
 }
