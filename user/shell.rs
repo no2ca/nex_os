@@ -98,9 +98,10 @@ extern "C" fn start() {
 
 fn main() {
     println!("Hello from shell!!");
-    let c = read_byte();
-    println!("{}", c);
     loop {
-        core::hint::spin_loop();
+        print!("> ");
+        let c = read_byte();
+        Writer::write_byte(c);
+        println!("\n{}", c);
     }
 }

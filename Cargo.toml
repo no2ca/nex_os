@@ -10,8 +10,8 @@ panic = "abort"
 panic = "abort"
 
 [[bin]]
-name = "nex"
-path = "src/main.rs"
+name = "kernel"
+path = "kernel/main.rs"
 test = false
 bench = false
 
