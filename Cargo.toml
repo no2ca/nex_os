@@ -1,26 +1,9 @@
-[package]
-name = "nex"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["kernel", "user"]
+resolver = "2"
 
 [profile.dev]
 panic = "abort"
 
 [profile.release]
 panic = "abort"
-
-[[bin]]
-name = "kernel"
-path = "kernel/main.rs"
-test = false
-bench = false
-
-[[bin]]
-name = "shell"
-path = "user/shell.rs"
-test = false
-bench = false
-
-[dependencies]
-bitflags = "2.10.0"
-zerocopy = {version = "0.7", features = ["derive"]}

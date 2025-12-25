@@ -27,8 +27,8 @@
   "target-pointer-width": 64,
   "pre-link-args": {
     "gnu-lld": [
-      "-Tuser.ld", 
-      "-Map=user.map"
+      "-Tkernel.ld", 
+      "-Map=kernel.map"
     ]
   }
 }
