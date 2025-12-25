@@ -11,7 +11,7 @@ Currently WIP.
 
 ```bash
 docker build -t nex_os .
-docker run --rm -it -v $(pwd):/work ./run.sh
+docker run --rm -it -v $(pwd):/work nex_os ./run.sh
 ```
 
 ## Implemented Features
