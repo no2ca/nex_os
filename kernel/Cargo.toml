@@ -9,6 +9,6 @@ zerocopy = { version = "0.7", features = ["derive"] }
 
 [[bin]]
 name = "kernel"
-path = "main.rs"
+path = "src/main.rs"
 test = false
 bench = false

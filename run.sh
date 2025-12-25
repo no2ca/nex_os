@@ -6,10 +6,10 @@ QEMU=qemu-system-riscv64
 
 cargo fmt --all
 
-cargo build -r --bin shell --target user-riscv64gc-unknown-none-elf.json
+cargo build -r --bin shell --target user/user-riscv64gc-unknown-none-elf.json
 cp ./target/user-riscv64gc-unknown-none-elf/release/shell ./shell.elf
 
-cargo build -r --bin kernel --target kernel-riscv64gc-unknown-none-elf.json
+cargo build -r --bin kernel --target kernel/kernel-riscv64gc-unknown-none-elf.json
 cp ./target/riscv64gc-unknown-none-elf/release/kernel ./kernel.elf
 
 # QEMUを起動
