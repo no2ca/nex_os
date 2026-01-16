@@ -117,7 +117,7 @@ use core::{slice, usize};
 
 use crate::alloc::PAGE_SIZE;
 use crate::utils::align_up;
-use crate::vmem::{self, PageFlags};
+use crate::mem::{self, PageFlags};
 use crate::{alloc, csr, loadelf, println};
 
 struct ProcessTableCell<T> {
@@ -278,7 +278,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
         // ページングの有効化
         // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
         let pt_number =
-            vmem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
+            mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
         csr::write_csr(csr::Csr::Satp, pt_number);
 
         // 割り込み時のカーネルスタックのspの保存
@@ -310,7 +310,7 @@ fn map_kernel_pages(page_table: &mut [usize], allocator: &mut alloc::Allocator) 
     let end_paddr = unsafe { &alloc::__free_ram_end as *const u8 as usize };
     let mut paddr = start_paddr;
     while paddr < end_paddr {
-        vmem::map_page(page_table, paddr, paddr, flags, allocator);
+        mem::map_page(page_table, paddr, paddr, flags, allocator);
         paddr += alloc::PAGE_SIZE;
     }
 }
@@ -351,7 +351,7 @@ fn map_user_pages(
             for i in 0..pages_num {
                 let paddr = page_start_paddr + i * PAGE_SIZE;
                 let vaddr = page_start_vaddr + i * PAGE_SIZE;
-                vmem::map_page(page_table, vaddr, paddr, user_flags, allocator);
+                mem::map_page(page_table, vaddr, paddr, user_flags, allocator);
             }
         }
     }
