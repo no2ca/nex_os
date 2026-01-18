@@ -2,6 +2,7 @@
 #![no_main]
 use core::arch::naked_asm;
 use core::{arch::asm, panic::PanicInfo};
+use syscall::{SYS_WRITE_BYTE, SYS_READ_BYTE};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -17,9 +18,6 @@ unsafe extern "C" {
 //
 // システムコール
 //
-
-const SYS_WRITE_BYTE: usize = 1;
-const SYS_READ_BYTE: usize = 2;
 
 fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
     let sysret: isize;

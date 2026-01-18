@@ -8,3 +8,6 @@ name = "shell"
 path = "shell.rs"
 test = false
 bench = false
+
+[dependencies]
+syscall = { path = "../syscall" }

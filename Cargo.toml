@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "user"]
+members = ["kernel", "syscall", "user"]
 resolver = "2"
 
 [profile.dev]
