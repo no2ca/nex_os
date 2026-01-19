@@ -116,8 +116,8 @@ use core::{arch::naked_asm, cell::UnsafeCell};
 use core::{slice, usize};
 
 use crate::alloc::PAGE_SIZE;
-use crate::utils::align_up;
 use crate::mem::{self, PageFlags};
+use crate::utils::align_up;
 use crate::{alloc, csr, loadelf, println};
 
 struct ProcessTableCell<T> {

@@ -8,12 +8,12 @@ mod alloc;
 mod boot;
 mod console;
 mod csr;
+mod ksyscall;
 mod loadelf;
+mod mem;
 mod procv2;
-mod syscall;
 mod trap;
 mod utils;
-mod mem;
 
 use crate::{
     alloc::{__free_ram, Allocator},

@@ -2,7 +2,7 @@
 #![no_main]
 use core::arch::naked_asm;
 use core::{arch::asm, panic::PanicInfo};
-use syscall::{SYS_WRITE_BYTE, SYS_READ_BYTE};
+use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {

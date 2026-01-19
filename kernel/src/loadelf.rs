@@ -1,4 +1,4 @@
-use crate::{println, mem::PageFlags};
+use crate::{mem::PageFlags, println};
 use bitflags::bitflags;
 use zerocopy::{FromBytes, FromZeroes};
 

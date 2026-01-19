@@ -1,4 +1,5 @@
 use crate::console::{self, Writer};
+use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE};
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 #[allow(unused)]
@@ -37,9 +38,6 @@ struct TrapFrame {
     s11: usize,
     sp: usize,
 }
-
-const SYS_WRITE_BYTE: usize = 1;
-const SYS_READ_BYTE: usize = 2;
 
 pub fn handle_syscall(trap_frame: *mut u8) {
     let trap_frame_slice =

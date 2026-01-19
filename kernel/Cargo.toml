@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bitflags = "2.10.0"
 zerocopy = { version = "0.7", features = ["derive"] }
+syscall = { path = "../syscall"}
 
 [[bin]]
 name = "kernel"

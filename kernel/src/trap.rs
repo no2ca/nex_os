@@ -93,7 +93,7 @@ pub extern "C" fn handle_trap(trap_frame: *mut u8) {
     let user_pc = read_csr(Csr::Sepc);
 
     if scause == SCAUSE_ECALL {
-        crate::syscall::handle_syscall(trap_frame);
+        crate::ksyscall::handle_syscall(trap_frame);
     } else {
         panic!(
             "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
