@@ -10,7 +10,7 @@ cargo build -r --bin shell --target user/user-riscv64gc-unknown-none-elf.json
 cp ./target/user-riscv64gc-unknown-none-elf/release/shell ./shell.elf
 
 cargo build -r --bin kernel --target kernel/kernel-riscv64gc-unknown-none-elf.json
-cp ./target/riscv64gc-unknown-none-elf/release/kernel ./kernel.elf
+cp ./target/kernel-riscv64gc-unknown-none-elf/release/kernel ./kernel.elf
 
 # QEMUを起動
 $QEMU -machine virt -bios default -nographic -serial mon:stdio --no-reboot -kernel kernel.elf
