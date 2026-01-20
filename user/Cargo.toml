@@ -11,3 +11,4 @@ bench = false
 
 [dependencies]
 syscall = { path = "../syscall" }
+userlib = { path = "../userlib" }

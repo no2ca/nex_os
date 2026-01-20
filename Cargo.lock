@@ -67,6 +67,14 @@ name = "user"
 version = "0.1.0"
 dependencies = [
  "syscall",
+ "userlib",
+]
+
+[[package]]
+name = "userlib"
+version = "0.1.0"
+dependencies = [
+ "syscall",
 ]
 
 [[package]]
