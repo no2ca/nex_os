@@ -78,7 +78,13 @@ fn main() {
 
         // バッファを文字列に変換
         let command_str = match from_utf8(&buf[0..input_length]) {
-            Ok(s) => s,
+            Ok(s) => {
+                if !s.is_ascii() {
+                    println!("Parse Error: input has non-ascii character");
+                    continue;
+                }
+                s
+            }
             Err(e) => {
                 println!("Parse Error: {}", e);
                 continue;
