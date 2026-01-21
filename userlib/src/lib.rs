@@ -5,7 +5,6 @@ use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // マクロのスコープの関係で関数を直接使っている
     _print(format_args!("\n{info}"));
     // TODO: ユーザーがpanicしたらプロセスはexitするようにしたい
     loop {}
@@ -64,7 +63,7 @@ pub fn _print(args: fmt::Arguments) {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => (let _ = crate::userlib::_print(format_args!($($arg)*)););
+    ($($arg:tt)*) => (crate::userlib::_print(format_args!($($arg)*)););
 }
 
 #[macro_export]
