@@ -27,18 +27,25 @@ fn main() {
             }
 
             // Backspaceが押されたとき
-            if c == 127 || c == 8 {
+            if c == 0x7f || c == 0x8 {
                 // 1つ前の文字を消す
-                if !buf.get(index - 1).is_none() {
+                if index > 0 {
                     buf[index - 1] = 0;
                     index -= 1;
                     // カーソルを左に1つ動かす
-                    Writer::write_byte(8);
+                    Writer::write_byte(0x8);
                     // 消したい文字をスペースで置き換える
                     Writer::write_byte(0x20);
                     // カーソルを左に動かして入力できるようにする
-                    Writer::write_byte(8);
+                    Writer::write_byte(0x8);
                 }
+                continue;
+            }
+
+            // エスケープ文字のとき
+            if c == 0x1b {
+                let _c2 = read_byte();
+                let _c3 = read_byte();
                 continue;
             }
 
