@@ -4,7 +4,10 @@ use core::{arch::asm, panic::PanicInfo};
 use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE};
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
+    // マクロのスコープの関係で関数を直接使っている
+    _print(format_args!("\n{info}"));
+    // TODO: ユーザーがpanicしたらプロセスはexitするようにしたい
     loop {}
 }
 
