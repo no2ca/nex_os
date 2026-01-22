@@ -1,5 +1,7 @@
 #![no_std]
 #![no_main]
+#![feature(custom_test_frameworks)]
+#![test_runner(crate::test_runner)]
 
 use core::{
     error,
@@ -210,6 +212,9 @@ fn main() {
 }
 
 fn shell() {
+    #[cfg(test)]
+    test_runner(tests);
+
     let mut history = [[0u8; MAX_ARGS]; HISTORY_SIZE];
     let mut count = 0;
     loop {
@@ -243,4 +248,20 @@ fn prompt(history: &mut [[u8; MAX_ARGS]], count: &mut usize) -> Result<(), Shell
     *count += 1;
 
     Ok(())
+}
+
+
+#[cfg(test)]
+pub fn test_runner(tests: &[&dyn Fn()]) {
+    println!("Running {} tests", tests.len());
+    for test in tests {
+        test();
+    }
+}
+
+#[test_case]
+fn trivial_assertion() {
+    print!("trivial assertion... ");
+    assert_eq!(1, 1);
+    println!("[ok]");
 }
