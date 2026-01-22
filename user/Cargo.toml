@@ -12,3 +12,4 @@ bench = false
 [dependencies]
 syscall = { path = "../syscall" }
 userlib = { path = "../userlib" }
+thiserror = { version = "2", default-features = false } 

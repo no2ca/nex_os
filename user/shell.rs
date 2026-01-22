@@ -2,7 +2,8 @@
 #![no_main]
 
 use core::{
-    fmt::{self},
+    error,
+    fmt::{self, Display},
     str::{Utf8Error, from_utf8},
 };
 
@@ -20,6 +21,16 @@ const MAX_ARGS: usize = 128;
 enum ReadLineError {
     Overflow,
 }
+
+impl Display for ReadLineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ReadLineError::Overflow => write!(f, "buffer overflow (buffer size is {})", BUF_SIZE),
+        }
+    }
+}
+
+impl error::Error for ReadLineError {}
 
 fn read_line(buf: &mut [u8]) -> Result<usize, ReadLineError> {
     // 入力を受け取る
@@ -99,6 +110,8 @@ impl fmt::Display for ParseError {
     }
 }
 
+impl error::Error for ParseError {}
+
 fn parse_input(buf: &[u8], len: usize) -> Result<[&str; MAX_ARGS], ParseError> {
     // バッファを文字列に変換
     let input = from_utf8(&buf[0..len])?;
@@ -124,8 +137,9 @@ fn run_command(command: [&str; MAX_ARGS], history: &[[u8; MAX_ARGS]]) {
         "help" => builtin_help(),
         "echo" => builtin_echo(command),
         "history" => builtin_history(history),
+        "ohgiri" => builtin_ohgiri(),
         _ => {
-            println!("{}: comannd not found", command[0]);
+            println!("{}: command not found", command[0]);
             // println!("DEBUG: {:?}", command_str.as_bytes());
         }
     }
@@ -139,12 +153,17 @@ fn builtin_hello() {
     println!("hello");
 }
 
+fn builtin_ohgiri() {
+    println!("大喜利が足りないぜ");
+}
+
 fn builtin_help() {
-    let help_msg = r#"
+    let help_msg = "
 Available commands:
-    hello: Just says "hello"
-    echo: Builtin echo command
-"#;
+    hello:\tJust says 'hello'
+    echo:\tBuiltin echo command
+    history:\tShow history
+";
     println!("{}", help_msg);
 }
 
@@ -175,45 +194,53 @@ fn builtin_history(history: &[[u8; MAX_ARGS]]) {
 // main
 //
 
+use thiserror::Error;
+#[derive(Error, Debug)]
+enum ShellError {
+    #[error("Error Reading Line: {0}")]
+    ReadLineError(#[from] ReadLineError),
+    #[error("Parse Error: {0}")]
+    ParseError(#[from] ParseError),
+}
+
 user_main!(main);
 
 fn main() {
-    println!("Hello from shell!!");
-    let mut history = [[0u8; BUF_SIZE]; HISTORY_SIZE];
-    let mut i = 0;
+    shell();
+}
+
+fn shell() {
+    let mut history = [[0u8; MAX_ARGS]; HISTORY_SIZE];
+    let mut count = 0;
     loop {
-        print!("> ");
-
-        // 入力を読む
-        let mut buf = [0u8; BUF_SIZE];
-        let len = match read_line(&mut buf) {
-            Ok(len) => len,
-            Err(e) => {
-                print!("\n");
-                println!("Error Reading Line: {:?}", e);
-                continue;
-            }
-        };
-
-        // 入力が無いとき
-        if len == 0 {
-            continue;
+        if let Err(e) = prompt(&mut history, &mut count) {
+            println!("{e}");
         }
-
-        // 入力を文字列に変換する
-        let command = match parse_input(&buf, len) {
-            Ok(input) => input,
-            Err(e) => {
-                println!("Parse Error: {}", e);
-                continue;
-            }
-        };
-
-        // historyを保存する
-        history[i % HISTORY_SIZE][..len].copy_from_slice(&buf[..len]);
-
-        run_command(command, &history[0..i]);
-
-        i += 1;
     }
+}
+
+fn prompt(history: &mut [[u8; MAX_ARGS]], count: &mut usize) -> Result<(), ShellError> {
+    print!("> ");
+
+    // 入力を読む
+    let mut buf = [0u8; BUF_SIZE];
+    let len = read_line(&mut buf)?;
+
+    // 入力が無いとき
+    if len == 0 {
+        return Ok(());
+    }
+
+    // 入力を文字列に変換する
+    let command = parse_input(&buf, len)?;
+
+    // historyを保存する
+    history[*count % HISTORY_SIZE][..len].copy_from_slice(&buf[..len]);
+
+    // コマンドを走らせる
+    run_command(command, &history[0..*count]);
+
+    *count += 1;
+
+    Ok(())
 }
