@@ -1,3 +1,4 @@
+cargo fmt --all
 cargo build --features shell-test --bin shell --target user/user-riscv64gc-unknown-none-elf.json
 cp ./target/user-riscv64gc-unknown-none-elf/debug/shell ./shell.elf
 

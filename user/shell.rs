@@ -11,7 +11,7 @@ use userlib::{self, Writer, print, println, read_byte, user_main};
 
 const HISTORY_SIZE: usize = 128;
 const BUF_SIZE: usize = 128;
-const MAX_ARGS: usize = 128;
+const ARGS_SIZE: usize = 128;
 
 //
 // 文字列を受け取る
@@ -32,61 +32,8 @@ impl Display for ReadLineError {
 
 impl error::Error for ReadLineError {}
 
-fn read_line(buf: &mut [u8]) -> Result<usize, ReadLineError> {
-    // 入力を受け取る
-    let mut index = 0;
-    loop {
-        let c = read_byte();
-
-        match c {
-            // 改行キーが押されたとき
-            b'\r' => {
-                print!("\n");
-                break;
-            }
-
-            // Backspaceが押されたとき
-            0x7f | 0x8 => {
-                // 1つ前の文字を消す
-                if index > 0 {
-                    buf[index - 1] = 0;
-                    index -= 1;
-                    // カーソルを左に1つ動かす
-                    Writer::write_byte(0x8);
-                    // 消したい文字をスペースで置き換える
-                    Writer::write_byte(0x20);
-                    // カーソルを左に動かして入力できるようにする
-                    Writer::write_byte(0x8);
-                }
-                continue;
-            }
-
-            // エスケープ文字のとき
-            0x1b => {
-                let _c2 = read_byte();
-                let _c3 = read_byte();
-                continue;
-            }
-
-            _ => {}
-        }
-
-        // バッファに収まる場合のみ書き込む
-        if index < BUF_SIZE {
-            buf[index] = c;
-        } else {
-            return Err(ReadLineError::Overflow);
-        }
-
-        Writer::write_byte(c);
-        index += 1;
-    }
-
-    Ok(index)
-}
-
 //
-// パースを行う
+// パースに関するエラー
 //
 
 #[derive(Debug)]
@@ -112,39 +59,6 @@ impl fmt::Display for ParseError {
 
 impl error::Error for ParseError {}
 
-fn parse_input(buf: &[u8], len: usize) -> Result<[&str; MAX_ARGS], ParseError> {
-    // バッファを文字列に変換
-    let input = from_utf8(&buf[0..len])?;
-    if !input.is_ascii() {
-        return Err(ParseError::NonAsciiChar);
-    };
-
-    let mut items: [&str; MAX_ARGS] = [""; MAX_ARGS];
-    for (i, item) in input.split_whitespace().enumerate() {
-        items[i] = item;
-    }
-
-    Ok(items)
-}
-
-//
-// コマンドを実行する
-//
-
-fn run_command(cmd: [&str; MAX_ARGS], history: &[[u8; MAX_ARGS]]) {
-    match cmd[0] {
-        "hello" => builtin_hello(),
-        "help" => builtin_help(),
-        "echo" => builtin_echo(cmd),
-        "history" => builtin_history(history),
-        "ohgiri" => builtin_ohgiri(),
-        _ => {
-            println!("{}: command not found", cmd[0]);
-            // println!("DEBUG: {:?}", command_str.as_bytes());
-        }
-    }
-}
-
 //
 // ビルトインコマンド
 //
@@ -167,8 +81,8 @@ Available commands:
     println!("{}", help_msg);
 }
 
-fn builtin_echo(args: [&str; MAX_ARGS]) {
-    for (i, arg) in args[1..MAX_ARGS].iter().enumerate() {
+fn builtin_echo(args: [&str; ARGS_SIZE]) {
+    for (i, arg) in args[1..ARGS_SIZE].iter().enumerate() {
         if arg.is_empty() {
             break;
         }
@@ -181,10 +95,12 @@ fn builtin_echo(args: [&str; MAX_ARGS]) {
     print!("\n");
 }
 
-fn builtin_history(history: &[[u8; MAX_ARGS]]) {
-    for item in history.iter().rev() {
-        let s = from_utf8(item).unwrap();
-        if !s.is_empty() {
+fn builtin_history(history: &[[u8; BUF_SIZE]], history_len: &[usize; HISTORY_SIZE]) {
+    for (item, len) in history.iter().zip(history_len.iter()).rev() {
+        if *len == 0 {
+            continue;
+        }
+        if let Ok(s) = from_utf8(&item[..*len]) {
             println!("{}", s);
         }
     }
@@ -203,6 +119,135 @@ enum ShellError {
     ParseError(#[from] ParseError),
 }
 
+struct Console {
+    history: [[u8; BUF_SIZE]; HISTORY_SIZE],
+    history_len: [usize; HISTORY_SIZE],
+    count: usize,
+    buf: [u8; BUF_SIZE],
+}
+
+impl Console {
+    fn new() -> Self {
+        Self {
+            history: [[0u8; BUF_SIZE]; HISTORY_SIZE],
+            history_len: [0usize; HISTORY_SIZE],
+            count: 0,
+            buf: [0u8; BUF_SIZE],
+        }
+    }
+
+    /// 一行読み取り，読み取ったバイト数を返す
+    fn read_line(&mut self) -> Result<usize, ReadLineError> {
+        // 入力を受け取る
+        let mut index = 0;
+        loop {
+            let c = read_byte();
+            match c {
+                // 改行キーが押されたとき
+                b'\r' => {
+                    print!("\n");
+                    break;
+                }
+                // Backspaceが押されたとき
+                0x7f | 0x8 => {
+                    // 1つ前の文字を消す
+                    if index > 0 {
+                        self.buf[index - 1] = 0;
+                        index -= 1;
+                        // カーソルを左に1つ動かす
+                        Writer::write_byte(0x8);
+                        // 消したい文字をスペースで置き換える
+                        Writer::write_byte(0x20);
+                        // カーソルを左に動かして入力できるようにする
+                        Writer::write_byte(0x8);
+                    }
+                    continue;
+                }
+                // エスケープ文字のとき
+                0x1b => {
+                    let c2 = read_byte();
+                    let c3 = read_byte();
+                    // 上向き矢印のとき
+                    if c2 == b'[' && c3 == b'A' {}
+                    // 下向き矢印のとき
+                    if c2 == b'[' && c3 == b'B' {}
+                    continue;
+                }
+                _ => {}
+            }
+            // バッファに収まる場合のみ書き込む
+            if index < BUF_SIZE {
+                self.buf[index] = c;
+            } else {
+                return Err(ReadLineError::Overflow);
+            }
+            Writer::write_byte(c);
+            index += 1;
+        }
+
+        Ok(index)
+    }
+
+    /// バッファに入っているバイト数を受け取る
+    ///
+    /// 引数ごとに分割された文字列スライスのリストを返す
+    fn parse_input(&self, input_len: usize) -> Result<[&str; ARGS_SIZE], ParseError> {
+        // バッファを文字列に変換
+        let input = from_utf8(&self.buf[0..input_len])?;
+        if !input.is_ascii() {
+            return Err(ParseError::NonAsciiChar);
+        };
+
+        let mut items: [&str; ARGS_SIZE] = [""; ARGS_SIZE];
+        for (i, item) in input.split_whitespace().enumerate() {
+            items[i] = item;
+        }
+
+        Ok(items)
+    }
+
+    fn run_command(&self, cmd: [&str; ARGS_SIZE]) {
+        match cmd[0] {
+            "hello" => builtin_hello(),
+            "help" => builtin_help(),
+            "echo" => builtin_echo(cmd),
+            "history" => builtin_history(&self.history, &self.history_len),
+            "ohgiri" => builtin_ohgiri(),
+            _ => {
+                println!("{}: command not found", cmd[0]);
+                // println!("DEBUG: {:?}", command_str.as_bytes());
+            }
+        }
+    }
+
+    fn prompt(&mut self) -> Result<(), ShellError> {
+        print!("> ");
+
+        // 入力を読む
+        let input_len = self.read_line()?;
+
+        // 入力が無いとき
+        if input_len == 0 {
+            return Ok(());
+        }
+
+        // 入力を文字列に変換する
+        let cmd = self.parse_input(input_len)?;
+
+        // コマンドを走らせる
+        self.run_command(cmd);
+
+        // historyを保存する
+        let index = self.count % HISTORY_SIZE;
+        self.history[index][..input_len].copy_from_slice(&self.buf[..input_len]);
+        self.history_len[index] = input_len;
+
+        self.count += 1;
+
+        Ok(())
+    }
+}
+
 user_main!(main);
 
 fn main() {
@@ -213,78 +258,79 @@ fn shell() {
     #[cfg(feature = "shell-test")]
     test_runner();
 
-    let mut history = [[0u8; MAX_ARGS]; HISTORY_SIZE];
-    let mut count = 0;
+    let mut con = Console::new();
+
     loop {
-        if let Err(e) = prompt(&mut history, &mut count) {
+        if let Err(e) = con.prompt() {
             println!("{e}");
         }
     }
-}
-
-fn prompt(history: &mut [[u8; MAX_ARGS]], count: &mut usize) -> Result<(), ShellError> {
-    print!("> ");
-
-    // 入力を読む
-    let mut buf = [0u8; BUF_SIZE];
-    let len = read_line(&mut buf)?;
-
-    // 入力が無いとき
-    if len == 0 {
-        return Ok(());
-    }
-
-    // 入力を文字列に変換する
-    let cmd = parse_input(&buf, len)?;
-
-    // historyを保存する
-    history[*count % HISTORY_SIZE][..len].copy_from_slice(&buf[..len]);
-
-    // TODO: これで良い感じなのでhitoryはu8の配列ではなく文字列スライスにすべき
-    // let mut hstry = [[""; 3]; 1];
-    // hstry[*count % HISTORY_SIZE][..3].copy_from_slice(&cmd[..3]);
-    // for x in hstry[*count % HISTORY_SIZE].iter() {
-    //     if *x != "" {
-    //         println!("{:?}", x);
-    //     }
-    // }
-
-    // コマンドを走らせる
-    run_command(cmd, &history[0..*count]);
-
-    *count += 1;
-
-    Ok(())
 }
 
 #[cfg(feature = "shell-test")]
 pub fn test_runner() {
     println!("Starting Test...");
     test_echo();
+    test_many_echo();
     test_history();
+    test_many_history();
     loop {}
 }
 
 #[cfg(feature = "shell-test")]
 fn test_echo() {
     println!("[test] test_echo:");
-    let mut cmd = [""; MAX_ARGS];
+    let mut cmd = [""; ARGS_SIZE];
     cmd[0] = "echo";
     cmd[1] = "foo";
-    let history: &[[u8; 128]] = &[[0u8; MAX_ARGS]; HISTORY_SIZE];
-    run_command(cmd, history);
+    let con = Console::new();
+    con.run_command(cmd);
+    println!("[OK]");
+}
+
+#[cfg(feature = "shell-test")]
+fn test_many_echo() {
+    println!("[test] test_echo:");
+    let mut cmd = [""; ARGS_SIZE];
+    cmd[0] = "echo";
+    cmd[1] = "foo";
+    cmd[2] = "bar";
+    cmd[3] = "hoge";
+    cmd[4] = "piyo";
+    let con = Console::new();
+    con.run_command(cmd);
     println!("[OK]");
 }
 
 #[cfg(feature = "shell-test")]
 fn test_history() {
     println!("[test] test_history:");
-    let mut cmd = [""; MAX_ARGS];
+    let mut cmd = [""; ARGS_SIZE];
     cmd[0] = "history";
-    let history: &mut [[u8; 128]] = &mut [[0u8; MAX_ARGS]; HISTORY_SIZE];
-    for (i, x) in "this_is_dummy_history".bytes().enumerate() {
-        history[0][i] = x;
+    let mut con = Console::new();
+    let dummy = "dummy";
+    for (i, b) in dummy.bytes().enumerate() {
+        con.history[0][i] = b;
     }
-    run_command(cmd, &history[0..1]);
+    con.history_len[0] = dummy.len();
+    con.run_command(cmd);
+    println!("[OK]");
+}
+
+#[cfg(feature = "shell-test")]
+fn test_many_history() {
+    println!("[test] test_many_history:");
+    let mut cmd = [""; ARGS_SIZE];
+    cmd[0] = "history";
+
+    let mut con = Console::new();
+    let dummy = "dummy";
+    for i in 0..5 {
+        for (j, b) in dummy.bytes().enumerate() {
+            con.history[i][j] = b;
+        }
+        con.history_len[i] = dummy.len();
+    }
+    con.run_command(cmd);
     println!("[OK]");
 }
