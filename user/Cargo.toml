@@ -13,3 +13,6 @@ bench = false
 syscall = { path = "../syscall" }
 userlib = { path = "../userlib" }
 thiserror = { version = "2", default-features = false } 
+
+[features]
+shell-test = []

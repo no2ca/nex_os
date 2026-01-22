@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(custom_test_frameworks)]
-#![test_runner(crate::test_runner)]
 
 use core::{
     error,
@@ -133,15 +131,15 @@ fn parse_input(buf: &[u8], len: usize) -> Result<[&str; MAX_ARGS], ParseError> {
 // コマンドを実行する
 //
 
-fn run_command(command: [&str; MAX_ARGS], history: &[[u8; MAX_ARGS]]) {
-    match command[0] {
+fn run_command(cmd: [&str; MAX_ARGS], history: &[[u8; MAX_ARGS]]) {
+    match cmd[0] {
         "hello" => builtin_hello(),
         "help" => builtin_help(),
-        "echo" => builtin_echo(command),
+        "echo" => builtin_echo(cmd),
         "history" => builtin_history(history),
         "ohgiri" => builtin_ohgiri(),
         _ => {
-            println!("{}: command not found", command[0]);
+            println!("{}: command not found", cmd[0]);
             // println!("DEBUG: {:?}", command_str.as_bytes());
         }
     }
@@ -212,8 +210,8 @@ fn main() {
 }
 
 fn shell() {
-    #[cfg(test)]
-    test_runner(tests);
+    #[cfg(feature = "shell-test")]
+    test_runner();
 
     let mut history = [[0u8; MAX_ARGS]; HISTORY_SIZE];
     let mut count = 0;
@@ -237,31 +235,56 @@ fn prompt(history: &mut [[u8; MAX_ARGS]], count: &mut usize) -> Result<(), Shell
     }
 
     // 入力を文字列に変換する
-    let command = parse_input(&buf, len)?;
+    let cmd = parse_input(&buf, len)?;
 
     // historyを保存する
     history[*count % HISTORY_SIZE][..len].copy_from_slice(&buf[..len]);
 
+    // TODO: これで良い感じなのでhitoryはu8の配列ではなく文字列スライスにすべき
+    // let mut hstry = [[""; 3]; 1];
+    // hstry[*count % HISTORY_SIZE][..3].copy_from_slice(&cmd[..3]);
+    // for x in hstry[*count % HISTORY_SIZE].iter() {
+    //     if *x != "" {
+    //         println!("{:?}", x);
+    //     }
+    // }
+
     // コマンドを走らせる
-    run_command(command, &history[0..*count]);
+    run_command(cmd, &history[0..*count]);
 
     *count += 1;
 
     Ok(())
 }
 
-
-#[cfg(test)]
-pub fn test_runner(tests: &[&dyn Fn()]) {
-    println!("Running {} tests", tests.len());
-    for test in tests {
-        test();
-    }
+#[cfg(feature = "shell-test")]
+pub fn test_runner() {
+    println!("Starting Test...");
+    test_echo();
+    test_history();
+    loop {}
 }
 
-#[test_case]
-fn trivial_assertion() {
-    print!("trivial assertion... ");
-    assert_eq!(1, 1);
-    println!("[ok]");
+#[cfg(feature = "shell-test")]
+fn test_echo() {
+    println!("[test] test_echo:");
+    let mut cmd = [""; MAX_ARGS];
+    cmd[0] = "echo";
+    cmd[1] = "foo";
+    let history: &[[u8; 128]] = &[[0u8; MAX_ARGS]; HISTORY_SIZE];
+    run_command(cmd, history);
+    println!("[OK]");
+}
+
+#[cfg(feature = "shell-test")]
+fn test_history() {
+    println!("[test] test_history:");
+    let mut cmd = [""; MAX_ARGS];
+    cmd[0] = "history";
+    let history: &mut [[u8; 128]] = &mut [[0u8; MAX_ARGS]; HISTORY_SIZE];
+    for (i, x) in "this_is_dummy_history".bytes().enumerate() {
+        history[0][i] = x;
+    }
+    run_command(cmd, &history[0..1]);
+    println!("[OK]");
 }
