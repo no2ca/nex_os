@@ -219,31 +219,27 @@ impl Console {
             }
         }
     }
+    
+    #[inline]
+    fn save_history(&mut self, input_len: usize) {
+        let index = self.count % HISTORY_SIZE;
+        self.history[index][..input_len].copy_from_slice(&self.buf[..input_len]);
+        self.history_len[index] = input_len;
+    }
 
     fn prompt(&mut self) -> Result<(), ShellError> {
         print!("> ");
 
-        // 入力を読む
         let input_len = self.read_line()?;
 
-        // 入力が無いとき
         if input_len == 0 {
             return Ok(());
         }
-
-        // 入力を文字列に変換する
         let cmd = self.parse_input(input_len)?;
-
-        // コマンドを走らせる
         self.run_command(cmd);
 
-        // historyを保存する
-        let index = self.count % HISTORY_SIZE;
-        self.history[index][..input_len].copy_from_slice(&self.buf[..input_len]);
-        self.history_len[index] = input_len;
-
+        self.save_history(input_len);
         self.count += 1;
-
         Ok(())
     }
 }
@@ -266,6 +262,10 @@ fn shell() {
         }
     }
 }
+
+//
+// tests
+//
 
 #[cfg(feature = "shell-test")]
 pub fn test_runner() {
