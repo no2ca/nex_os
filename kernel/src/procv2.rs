@@ -227,16 +227,20 @@ fn schedule<'a>() -> &'a Process {
             return p;
         }
     }
+    println!("[scheduler] No runnable process found");
     return &procs[0];
 }
 
-fn yield_process() {
+pub fn yield_process() {
     let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
     let next_proc = schedule();
 
     let prev_ctx = &mut prev_proc.context as *mut Context;
     let next_ctx = &next_proc.context as *const Context;
-    println!("switching ... {:?} -> {:?}", prev_proc.pid, next_proc.pid);
+    println!(
+        "[proc] switching ... {:?} -> {:?}",
+        prev_proc.pid, next_proc.pid
+    );
     switch_context(prev_ctx, next_ctx);
 }
 
