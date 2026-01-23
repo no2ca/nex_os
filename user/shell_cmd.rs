@@ -1,6 +1,6 @@
 use core::str::from_utf8;
 
-use userlib::{self, print, println};
+use userlib::{self, print, println, yield_process};
 
 use crate::{ARGS_SIZE, BUF_SIZE, HISTORY_SIZE};
 
@@ -15,9 +15,11 @@ pub fn builtin_ohgiri() {
 pub fn builtin_help() {
     let help_msg = "
 Available commands:
+    help:\tHelp comammd (this command)
     hello:\tJust says 'hello'
     echo:\tBuiltin echo command
     history:\tShow history
+    yield:\tYields current process
 ";
     println!("{}", help_msg);
 }
@@ -45,4 +47,8 @@ pub fn builtin_history(history: &[[u8; BUF_SIZE]], history_len: &[usize; HISTORY
             println!("{}", s);
         }
     }
+}
+
+pub fn builtin_yield() {
+    yield_process();
 }
