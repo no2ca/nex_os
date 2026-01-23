@@ -17,7 +17,7 @@ mod utils;
 
 use crate::{
     alloc::{__free_ram, Allocator},
-    csr::{Csr, read_csr, write_csr},
+    csr::{Csr, read_csr},
     trap::kernel_entry,
 };
 
@@ -38,65 +38,12 @@ fn dump_main_info() {
     }
 }
 
-/// OpenSBIのメモリ保護機能(PMP)の動作確認用関数
-///
-/// 0x80050000 から 0x87ffffff までの範囲が読み取り可能であることを確認する
-fn test_read_limit() {
-    let ptr_low = 0x80050000 as *mut u8;
-    unsafe {
-        let val = ptr_low.read_volatile();
-        println!("[pmp] read from {:p} pointer: {}", ptr_low, val);
-    }
-
-    let ptr_high = 0x87ffffff as *mut u8;
-    unsafe {
-        let val = ptr_high.read_volatile();
-        println!("[pmp] read from {:p} pointer: {}", ptr_high, val);
-    }
-}
-
-/// allocatorでページを確保するテスト関数
-///
-/// 2ページと1ページを確保してアドレスを表示する
-fn test_allocator(allocator: &mut Allocator) {
-    let paddr0 = allocator.alloc_pages(2).unwrap();
-    let paddr1 = allocator.alloc_pages(1).unwrap();
-    println!("[alloc] alloc_pages(2)\t\t: {:p}", paddr0);
-    println!("[alloc] alloc_pages(1)\t\t: {:p}", paddr1);
-}
-
-// procv2のテスト
-fn test_process(allocator: &mut Allocator) {
-    // TODO: initプロセスの実装
-    procv2::create_process(SHELL_ELF, allocator);
-    procv2::create_process(SHELL_ELF, allocator);
-    procv2::create_process(SHELL_ELF, allocator);
-    procv2::dump_process_list();
-    procv2::test_proc_switch();
-}
-
 fn main() {
-    // stvecにトラップ時のエントリポイントを設定
-    unsafe {
-        write_csr(Csr::Stvec, kernel_entry as usize);
-    }
-
-    // 初期情報の表示
     dump_main_info();
-
-    // Allocatorの初期化
     let mut allocator = Allocator::new();
-
-    // Allocatorのテスト
-    test_allocator(&mut allocator);
-
-    // 読み取りできる範囲のテスト
-    test_read_limit();
-
-    // プロセスの起動
-    test_process(&mut allocator);
-
-    loop {
-        core::hint::spin_loop();
-    }
+    procv2::create_idle_process(&mut allocator);
+    procv2::create_process(SHELL_ELF, &mut allocator);
+    procv2::dump_process_list();
+    procv2::start_process();
+    unreachable!()
 }
