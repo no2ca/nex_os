@@ -140,6 +140,7 @@ impl Console {
     fn read_line(&mut self) -> Result<usize, ReadLineError> {
         // 入力を受け取る
         let mut index = 0;
+        let mut hstry_idx = self.count;
         loop {
             let c = read_byte();
             match c {
@@ -168,9 +169,36 @@ impl Console {
                     let c2 = read_byte();
                     let c3 = read_byte();
                     // 上向き矢印のとき
-                    if c2 == b'[' && c3 == b'A' {}
+                    if c2 == b'[' && c3 == b'A' {
+                        hstry_idx = hstry_idx.saturating_sub(1);
+                        for _ in 0..index {
+                            Writer::write_byte(0x8);
+                            Writer::write_byte(0x20);
+                            Writer::write_byte(0x8);
+                        }
+                        for i in 0..self.history_len[hstry_idx] {
+                            Writer::write_byte(self.history[hstry_idx][i]);
+                        }
+                        index = self.history_len[hstry_idx];
+                    }
                     // 下向き矢印のとき
-                    if c2 == b'[' && c3 == b'B' {}
+                    if c2 == b'[' && c3 == b'B' {
+                        // countの意味を考えると現在実行されるコマンドが入る空白の場所
+                        // これよりも大きくなってほしくないため
+                        if hstry_idx < self.count {
+                            hstry_idx += 1;
+                        }
+                        for _ in 0..index {
+                            Writer::write_byte(0x8);
+                            Writer::write_byte(0x20);
+                            Writer::write_byte(0x8);
+                        }
+                        for i in 0..self.history_len[hstry_idx] {
+                            Writer::write_byte(self.history[hstry_idx][i]);
+                        }
+                        index = self.history_len[hstry_idx];
+                        // println!("[debug] hstry_idx={}", hstry_idx);
+                    }
                     continue;
                 }
                 _ => {}
@@ -219,7 +247,7 @@ impl Console {
             }
         }
     }
-    
+
     #[inline]
     fn save_history(&mut self, input_len: usize) {
         let index = self.count % HISTORY_SIZE;
