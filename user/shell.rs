@@ -124,6 +124,7 @@ impl Console {
             "history" => shell_cmd::builtin_history(&self.history, &self.history_len),
             "ohgiri" => shell_cmd::builtin_ohgiri(),
             "yield" => shell_cmd::builtin_yield(),
+            "exit" => shell_cmd::builtin_exit(),
             _ => {
                 println!("{}: command not found", cmd[0]);
                 // println!("DEBUG: {:?}", command_str.as_bytes());

@@ -1,6 +1,6 @@
 use core::str::from_utf8;
 
-use userlib::{self, print, println, yield_process};
+use userlib::{self, exit_process, print, println, yield_process};
 
 use crate::{ARGS_SIZE, BUF_SIZE, HISTORY_SIZE};
 
@@ -51,4 +51,8 @@ pub fn builtin_history(history: &[[u8; BUF_SIZE]], history_len: &[usize; HISTORY
 
 pub fn builtin_yield() {
     yield_process();
+}
+
+pub fn builtin_exit() {
+    exit_process();
 }

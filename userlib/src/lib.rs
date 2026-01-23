@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 use core::{arch::asm, panic::PanicInfo};
-use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS};
+use syscall::{SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS};
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -103,4 +103,8 @@ macro_rules! user_main {
 
 pub fn yield_process() {
     syscall(SYS_YIELD_PROCESS, 0, 0, 0);
+}
+
+pub fn exit_process() {
+    syscall(SYS_EXIT_PROCESS, 0, 0, 0);
 }
