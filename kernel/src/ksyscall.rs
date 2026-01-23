@@ -2,7 +2,7 @@ use crate::{
     console::{self, Writer},
     procv2,
 };
-use syscall::{SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS};
+use syscall::{SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS};
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 #[allow(unused)]
@@ -62,6 +62,9 @@ pub fn handle_syscall(trap_frame: *mut u8) {
         },
         SYS_YIELD_PROCESS => {
             procv2::yield_process();
+        }
+        SYS_EXIT_PROCESS => {
+            procv2::end_process();
         }
         _ => unimplemented!("{}", sysno),
     }

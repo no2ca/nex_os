@@ -20,6 +20,7 @@ impl Pid {
 enum ProcState {
     Unused,
     Runnable,
+    Exited,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -238,7 +239,24 @@ pub fn yield_process() {
     let prev_ctx = &mut prev_proc.context as *mut Context;
     let next_ctx = &next_proc.context as *const Context;
     println!(
-        "[proc] switching ... {:?} -> {:?}",
+        "[yield_process] switching ... {:?} -> {:?}",
+        prev_proc.pid, next_proc.pid
+    );
+    switch_context(prev_ctx, next_ctx);
+}
+
+/// 現在のプロセスを終了する関数
+pub fn end_process() {
+    // スケジュールより先に状態を変える必要がある
+    let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
+    prev_proc.state = ProcState::Exited;
+
+    let next_proc = schedule();
+
+    let prev_ctx = &mut prev_proc.context as *mut Context;
+    let next_ctx = &next_proc.context as *const Context;
+    println!(
+        "[end_process] switching ... {:?} (exited) -> {:?}",
         prev_proc.pid, next_proc.pid
     );
     switch_context(prev_ctx, next_ctx);
