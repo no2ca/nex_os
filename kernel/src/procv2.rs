@@ -113,14 +113,13 @@ impl Process {
 // プロセステーブルの定義
 //
 
-use core::arch::asm;
-use core::{arch::naked_asm, cell::UnsafeCell};
-use core::{slice, usize};
-
 use crate::alloc::PAGE_SIZE;
 use crate::mem::{self, PageFlags};
 use crate::utils::align_up;
 use crate::{alloc, csr, loadelf, println};
+use core::arch::asm;
+use core::{arch::naked_asm, cell::UnsafeCell};
+use core::{slice, usize};
 
 struct ProcessTableCell<T> {
     inner: UnsafeCell<T>,
@@ -195,10 +194,11 @@ pub fn dump_process_list() {
     let ptable = unsafe { PTABLE.get() };
     for proc in ptable.procs.iter() {
         println!(
-            "\tpid={}, state={:?}, ra={:p}, sp={:p}",
+            "\tpid={}, state={:?}, ra={:p}, entry={:p}, sp={:p}",
             proc.pid.as_usize(),
             proc.state,
             proc.context.ra as *const u8,
+            proc.entry_point as *const u8,
             proc.context.sp as *const u8,
         );
     }
@@ -256,7 +256,85 @@ pub fn end_process() {
         "[end_process] switching ... {:?} (exited) -> {:?}",
         prev_proc.pid, next_proc.pid
     );
+
     switch_context(prev_proc, next_proc);
+}
+
+pub fn create_idle_process(allocator: &mut alloc::Allocator) {
+    let proc = unsafe { &mut PTABLE.get_mut().procs_mut()[0] };
+
+    // カーネルスタック領域の取得
+    let page_count = 1;
+    let kernel_stack_base = allocator.alloc_pages(page_count).unwrap() as *mut u8;
+    let kernel_stack_size = alloc::PAGE_SIZE * page_count;
+
+    // ページテーブルの作成
+    let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
+    let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
+    let pt_number = mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
+
+    // カーネル空間をマッピング
+    map_kernel_pages(page_table, allocator);
+
+    proc.pid = Pid(0);
+    proc.state = ProcState::Runnable;
+    proc.kernel_stack.base = kernel_stack_base;
+    proc.kernel_stack.size = kernel_stack_size;
+    proc.context.ra = idle_process as usize;
+    proc.context.sp = proc.kernel_stack.top() as usize;
+    proc.pt_number = pt_number;
+}
+
+#[allow(unused)]
+fn idle_process() {
+    println!("[idle_process] idling...");
+    loop {
+        core::hint::spin_loop();
+    }
+}
+
+pub fn start_process() {
+    let next = schedule();
+
+    if next.pid == Pid(0) {
+        panic!("[start_process] no process to start")
+    }
+
+    let pt_number = next.pt_number;
+    let kernel_stack_top = next.kernel_stack.top();
+    let entry_point = next.entry_point;
+    unsafe {
+        // ページングの有効化
+        csr::write_csr(csr::Csr::Satp, pt_number);
+        // 割り込み時のカーネルスタックのspの保存
+        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
+        // user_entryでsretしたときに最初に飛ぶアドレス
+        csr::write_csr(csr::Csr::Sepc, entry_point);
+    }
+    let ctx = &next.context;
+
+    _start_proc(ctx);
+}
+
+#[unsafe(naked)]
+extern "C" fn _start_proc(ctx: *const Context) {
+    naked_asm!(
+        "ld ra, 0(a0)",
+        "ld sp, 8(a0)",
+        "ld s0, 16(a0)",
+        "ld s1, 24(a0)",
+        "ld s2, 32(a0)",
+        "ld s3, 40(a0)",
+        "ld s4, 48(a0)",
+        "ld s5, 56(a0)",
+        "ld s6, 64(a0)",
+        "ld s7, 72(a0)",
+        "ld s8, 80(a0)",
+        "ld s9, 88(a0)",
+        "ld s10, 96(a0)",
+        "ld s11, 104(a0)",
+        "ret",
+    );
 }
 
 pub fn create_process(elf_data: &'static [u8], allocator: &mut alloc::Allocator) {
@@ -278,9 +356,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
 
     // カーネルスタック領域の取得
     let page_count = 1;
-    let kernel_stack_base = allocator
-        .alloc_pages(page_count)
-        .expect("Allocation failed!") as *mut u8;
+    let kernel_stack_base = allocator.alloc_pages(page_count).unwrap() as *mut u8;
     let kernel_stack_size = alloc::PAGE_SIZE * page_count;
 
     // ページテーブルの作成
@@ -428,10 +504,4 @@ extern "C" fn _swtch(prev: *mut Context, next: *const Context) {
         "ld s11, 104(a1)",
         "ret",
     );
-}
-
-pub fn test_proc_switch() {
-    println!("[test_proc_switch] calling yield_process()...");
-    yield_process();
-    println!("[test_proc_switch] test end");
 }
