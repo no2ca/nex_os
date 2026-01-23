@@ -92,18 +92,19 @@ struct Process {
     state: ProcState,
     kernel_stack: KernelStack,
     context: Context,
-    page_table: *mut [usize],
+    pt_number: usize,
+    entry_point: usize,
 }
 
 impl Process {
     const fn unused() -> Self {
-        let null_ptr_slice = core::ptr::slice_from_raw_parts_mut(core::ptr::null_mut(), 0);
         Self {
             pid: Pid(usize::MAX),
             state: ProcState::Unused,
             kernel_stack: KernelStack::null(),
             context: Context::zero(),
-            page_table: null_ptr_slice,
+            pt_number: 0,
+            entry_point: 0,
         }
     }
 }
@@ -236,13 +237,11 @@ pub fn yield_process() {
     let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
     let next_proc = schedule();
 
-    let prev_ctx = &mut prev_proc.context as *mut Context;
-    let next_ctx = &next_proc.context as *const Context;
     println!(
         "[yield_process] switching ... {:?} -> {:?}",
         prev_proc.pid, next_proc.pid
     );
-    switch_context(prev_ctx, next_ctx);
+    switch_context(prev_proc, next_proc);
 }
 
 /// 現在のプロセスを終了する関数
@@ -253,13 +252,11 @@ pub fn end_process() {
 
     let next_proc = schedule();
 
-    let prev_ctx = &mut prev_proc.context as *mut Context;
-    let next_ctx = &next_proc.context as *const Context;
     println!(
         "[end_process] switching ... {:?} (exited) -> {:?}",
         prev_proc.pid, next_proc.pid
     );
-    switch_context(prev_ctx, next_ctx);
+    switch_context(prev_proc, next_proc);
 }
 
 pub fn create_process(elf_data: &'static [u8], allocator: &mut alloc::Allocator) {
@@ -296,32 +293,19 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     // ユーザー空間をマッピング
     map_user_pages(&loaded, page_table, allocator);
 
-    unsafe {
-        // ページングの有効化
-        // satpレジスタの値はPTEと同様にページ番号で指定するのでPAGE_SIZEで割る
-        let pt_number =
-            mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
-        csr::write_csr(csr::Csr::Satp, pt_number);
-
-        // 割り込み時のカーネルスタックのspの保存
-        // WARNING: u8 (1byte) の単位で加算する必要がある
-        let kernel_stack_top = (kernel_stack_base as *mut u8).add(kernel_stack_size) as *mut usize;
-        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
-
-        // user_entryでsretしたときに最初に飛ぶアドレス
-        csr::write_csr(csr::Csr::Sepc, loaded.entry_point);
-    }
+    let pt_number = mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
 
     // TODO: インデックスがPidになるのは一時的な実装
+    // → これはProcState::Exitedを導入して被らないようにしている
+    // TODO: spにカーネルのスタックポインタを使用するとプロセス起動時に読めてしまう
     proc.pid = Pid(idx);
     proc.state = ProcState::Runnable;
     proc.kernel_stack.base = kernel_stack_base;
     proc.kernel_stack.size = kernel_stack_size;
     proc.context.ra = user_entry as usize;
-    // TODO: spにカーネルのスタックポインタを使用するとプロセス起動時に読めてしまう
-    // ユーザにspの設定を任せているので, ぶっちゃけ無くても動く
     proc.context.sp = proc.kernel_stack.top() as usize;
-    proc.page_table = page_table;
+    proc.pt_number = pt_number;
+    proc.entry_point = loaded.entry_point;
 }
 
 /// カーネル空間のマッピングを行う関数
@@ -394,8 +378,25 @@ extern "C" fn user_entry() {
     }
 }
 
+fn switch_context(prev: &mut Process, next: &Process) {
+    let pt_number = next.pt_number;
+    let kernel_stack_top = next.kernel_stack.top();
+    let entry_point = next.entry_point;
+    unsafe {
+        // ページングの有効化
+        csr::write_csr(csr::Csr::Satp, pt_number);
+        // 割り込み時のカーネルスタックのspの保存
+        csr::write_csr(csr::Csr::Sscratch, kernel_stack_top as usize);
+        // user_entryでsretしたときに最初に飛ぶアドレス
+        csr::write_csr(csr::Csr::Sepc, entry_point);
+    }
+    let prev_ctx = &mut prev.context;
+    let next_ctx = &next.context;
+    _swtch(prev_ctx, next_ctx);
+}
+
 #[unsafe(naked)]
-extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
+extern "C" fn _swtch(prev: *mut Context, next: *const Context) {
     naked_asm!(
         "sd ra, 0(a0)",
         "sd sp, 8(a0)",
@@ -432,4 +433,5 @@ extern "C" fn switch_context(prev: *mut Context, next: *const Context) {
 pub fn test_proc_switch() {
     println!("[test_proc_switch] calling yield_process()...");
     yield_process();
+    println!("[test_proc_switch] test end");
 }

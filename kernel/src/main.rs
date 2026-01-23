@@ -65,19 +65,10 @@ fn test_allocator(allocator: &mut Allocator) {
     println!("[alloc] alloc_pages(1)\t\t: {:p}", paddr1);
 }
 
-/// 未割当メモリへの書き込みを試みるテスト関数
-///
-/// 0xdeadbeef アドレスに書き込みを試み, メモリ例外が発生することを確認する
-fn test_memory_exception() {
-    unsafe {
-        let ptr = 0xdeadbeef as *mut u8;
-        ptr.write_volatile(0x42);
-    }
-}
-
 // procv2のテスト
 fn test_process(allocator: &mut Allocator) {
     // TODO: initプロセスの実装
+    procv2::create_process(SHELL_ELF, allocator);
     procv2::create_process(SHELL_ELF, allocator);
     procv2::create_process(SHELL_ELF, allocator);
     procv2::dump_process_list();
@@ -104,9 +95,6 @@ fn main() {
 
     // プロセスの起動
     test_process(&mut allocator);
-
-    // 未割当メモリへの書き込みテスト
-    test_memory_exception();
 
     loop {
         core::hint::spin_loop();
