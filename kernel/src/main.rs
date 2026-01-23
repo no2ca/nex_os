@@ -14,11 +14,13 @@ mod mem;
 mod proc;
 mod trap;
 mod utils;
+mod vfs;
 
 use crate::{
     alloc::{__free_ram, Allocator},
     csr::{Csr, read_csr},
     trap::kernel_entry,
+    vfs::{Fs, Node},
 };
 
 #[unsafe(no_mangle)]
@@ -38,9 +40,17 @@ fn dump_main_info() {
     }
 }
 
+fn test_vfs<F: Fs>(fs: F) {
+    let node: F::NodeType = fs.lookup("shell").unwrap();
+    println!("id={:?}, ref={:p}", node.get_id(), node.prefix());
+}
+
 fn main() {
     dump_main_info();
     let mut allocator = Allocator::new();
+
+    test_vfs(vfs::MemoryFs);
+
     proc::create_idle_process(&mut allocator);
     proc::create_process(SHELL_ELF, &mut allocator);
     proc::create_process(SHELL_ELF, &mut allocator);

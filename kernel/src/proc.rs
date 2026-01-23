@@ -429,7 +429,7 @@ pub fn create_process(elf_data: &'static [u8], allocator: &mut alloc::Allocator)
 }
 
 /// 現在のプロセス以外の実行可能プロセスに切り替える
-/// 
+///
 /// 他に無い場合は同じプロセスが実行状態になる
 pub fn yield_process() {
     let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
@@ -494,7 +494,7 @@ fn idle_process() {
 }
 
 /// カーネルがプロセスを開始する際に使用する関数
-/// 
+///
 /// コンテキストスイッチとの違いは前のプロセスが無いこと
 pub fn start_process() {
     let next = schedule();
