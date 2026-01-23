@@ -11,7 +11,7 @@ mod csr;
 mod ksyscall;
 mod loadelf;
 mod mem;
-mod procv2;
+mod proc;
 mod trap;
 mod utils;
 
@@ -41,9 +41,10 @@ fn dump_main_info() {
 fn main() {
     dump_main_info();
     let mut allocator = Allocator::new();
-    procv2::create_idle_process(&mut allocator);
-    procv2::create_process(SHELL_ELF, &mut allocator);
-    procv2::dump_process_list();
-    procv2::start_process();
+    proc::create_idle_process(&mut allocator);
+    proc::create_process(SHELL_ELF, &mut allocator);
+    proc::create_process(SHELL_ELF, &mut allocator);
+    proc::dump_process_list();
+    proc::start_process();
     unreachable!()
 }
