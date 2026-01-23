@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+mod shell_cmd;
+
 use core::{
     error,
     fmt::{self, Display},
@@ -12,112 +14,6 @@ use userlib::{self, Writer, print, println, read_byte, user_main};
 const HISTORY_SIZE: usize = 128;
 const BUF_SIZE: usize = 128;
 const ARGS_SIZE: usize = 128;
-
-//
-// 文字列を受け取る
-//
-
-#[derive(Debug)]
-enum ReadLineError {
-    Overflow,
-}
-
-impl Display for ReadLineError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            ReadLineError::Overflow => write!(f, "buffer overflow (buffer size is {})", BUF_SIZE),
-        }
-    }
-}
-
-impl error::Error for ReadLineError {}
-
-//
-// パースに関するエラー
-//
-
-#[derive(Debug)]
-enum ParseError {
-    Utf8Error(Utf8Error),
-    NonAsciiChar,
-}
-
-impl From<Utf8Error> for ParseError {
-    fn from(err: Utf8Error) -> ParseError {
-        ParseError::Utf8Error(err)
-    }
-}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            ParseError::Utf8Error(e) => write!(f, "{e}"),
-            ParseError::NonAsciiChar => write!(f, "non ascii character is not supported"),
-        }
-    }
-}
-
-impl error::Error for ParseError {}
-
-//
-// ビルトインコマンド
-//
-
-fn builtin_hello() {
-    println!("hello");
-}
-
-fn builtin_ohgiri() {
-    println!("大喜利が足りないぜ");
-}
-
-fn builtin_help() {
-    let help_msg = "
-Available commands:
-    hello:\tJust says 'hello'
-    echo:\tBuiltin echo command
-    history:\tShow history
-";
-    println!("{}", help_msg);
-}
-
-fn builtin_echo(args: [&str; ARGS_SIZE]) {
-    for (i, arg) in args[1..ARGS_SIZE].iter().enumerate() {
-        if arg.is_empty() {
-            break;
-        }
-        // 区切りはすべてスペースにする
-        if i != 0 {
-            print!(" ");
-        }
-        print!("{}", args[i + 1]);
-    }
-    print!("\n");
-}
-
-fn builtin_history(history: &[[u8; BUF_SIZE]], history_len: &[usize; HISTORY_SIZE]) {
-    for (item, len) in history.iter().zip(history_len.iter()).rev() {
-        if *len == 0 {
-            continue;
-        }
-        if let Ok(s) = from_utf8(&item[..*len]) {
-            println!("{}", s);
-        }
-    }
-}
-
-//
-// main
-//
-
-use thiserror::Error;
-#[derive(Error, Debug)]
-enum ShellError {
-    #[error("Error Reading Line: {0}")]
-    ReadLineError(#[from] ReadLineError),
-    #[error("Parse Error: {0}")]
-    ParseError(#[from] ParseError),
-}
 
 struct Console {
     history: [[u8; BUF_SIZE]; HISTORY_SIZE],
@@ -171,31 +67,17 @@ impl Console {
                     // 上向き矢印のとき
                     if c2 == b'[' && c3 == b'A' {
                         hstry_idx = hstry_idx.saturating_sub(1);
-                        for _ in 0..index {
-                            Writer::write_byte(0x8);
-                            Writer::write_byte(0x20);
-                            Writer::write_byte(0x8);
-                        }
-                        for i in 0..self.history_len[hstry_idx] {
-                            Writer::write_byte(self.history[hstry_idx][i]);
-                        }
+                        self.show_history_inline(index, hstry_idx);
                         index = self.history_len[hstry_idx];
                     }
                     // 下向き矢印のとき
                     if c2 == b'[' && c3 == b'B' {
-                        // countの意味を考えると現在実行されるコマンドが入る空白の場所
+                        // countは現在実行されるコマンドが入る空白の場所
                         // これよりも大きくなってほしくないため
                         if hstry_idx < self.count {
                             hstry_idx += 1;
                         }
-                        for _ in 0..index {
-                            Writer::write_byte(0x8);
-                            Writer::write_byte(0x20);
-                            Writer::write_byte(0x8);
-                        }
-                        for i in 0..self.history_len[hstry_idx] {
-                            Writer::write_byte(self.history[hstry_idx][i]);
-                        }
+                        self.show_history_inline(index, hstry_idx);
                         index = self.history_len[hstry_idx];
                         // println!("[debug] hstry_idx={}", hstry_idx);
                     }
@@ -236,11 +118,11 @@ impl Console {
 
     fn run_command(&self, cmd: [&str; ARGS_SIZE]) {
         match cmd[0] {
-            "hello" => builtin_hello(),
-            "help" => builtin_help(),
-            "echo" => builtin_echo(cmd),
-            "history" => builtin_history(&self.history, &self.history_len),
-            "ohgiri" => builtin_ohgiri(),
+            "hello" => shell_cmd::builtin_hello(),
+            "help" => shell_cmd::builtin_help(),
+            "echo" => shell_cmd::builtin_echo(cmd),
+            "history" => shell_cmd::builtin_history(&self.history, &self.history_len),
+            "ohgiri" => shell_cmd::builtin_ohgiri(),
             _ => {
                 println!("{}: command not found", cmd[0]);
                 // println!("DEBUG: {:?}", command_str.as_bytes());
@@ -255,6 +137,24 @@ impl Console {
         self.history_len[index] = input_len;
     }
 
+    #[inline]
+    fn show_history_inline(&mut self, index: usize, hstry_idx: usize) {
+        for i in 0..index {
+            // コンソールのクリア
+            Writer::write_byte(0x8);
+            Writer::write_byte(0x20);
+            Writer::write_byte(0x8);
+            // バッファのクリア
+            self.buf[i] = 0;
+        }
+        for i in 0..self.history_len[hstry_idx] {
+            // コンソールの出力
+            Writer::write_byte(self.history[hstry_idx][i]);
+            // バッファの出力
+            self.buf[i] = self.history[hstry_idx][i];
+        }
+    }
+
     fn prompt(&mut self) -> Result<(), ShellError> {
         print!("> ");
 
@@ -263,6 +163,7 @@ impl Console {
         if input_len == 0 {
             return Ok(());
         }
+
         let cmd = self.parse_input(input_len)?;
         self.run_command(cmd);
 
@@ -292,7 +193,60 @@ fn shell() {
 }
 
 //
-// tests
+// エラー型
+//
+
+use thiserror::Error;
+#[derive(Error, Debug)]
+enum ShellError {
+    #[error("Error Reading Line: {0}")]
+    ReadLineError(#[from] ReadLineError),
+    #[error("Parse Error: {0}")]
+    ParseError(#[from] ParseError),
+}
+
+/// 文字列取得に関するエラー
+#[derive(Debug)]
+enum ReadLineError {
+    Overflow,
+}
+
+impl Display for ReadLineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ReadLineError::Overflow => write!(f, "buffer overflow (buffer size is {})", BUF_SIZE),
+        }
+    }
+}
+
+impl error::Error for ReadLineError {}
+
+/// パースに関するエラー
+#[derive(Debug)]
+enum ParseError {
+    Utf8Error(Utf8Error),
+    NonAsciiChar,
+}
+
+impl From<Utf8Error> for ParseError {
+    fn from(err: Utf8Error) -> ParseError {
+        ParseError::Utf8Error(err)
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            ParseError::Utf8Error(e) => write!(f, "{e}"),
+            ParseError::NonAsciiChar => write!(f, "non ascii character is not supported"),
+        }
+    }
+}
+
+impl error::Error for ParseError {}
+
+//
+// テスト
 //
 
 #[cfg(feature = "shell-test")]
