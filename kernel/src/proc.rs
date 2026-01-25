@@ -249,12 +249,12 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
 
     // カーネルスタック領域の取得
     let page_count = 1;
-    let kernel_stack_base = allocator.alloc_pages(page_count).unwrap() as *mut u8;
+    let kernel_stack_base = allocator.alloc_pages::<u8>(page_count).as_mut_ptr();
     let kernel_stack_size = alloc::PAGE_SIZE * page_count;
 
     // ページテーブルの作成
-    let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
-    let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
+    let page_table_ptr = allocator.alloc_pages::<usize>(1).as_mut_ptr();
+    let page_table = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
 
     // カーネル空間をマッピング
     map_kernel_pages(page_table, allocator);
@@ -262,7 +262,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloc:
     // ユーザー空間をマッピング
     map_user_pages(&loaded, page_table, allocator);
 
-    let pt_number = mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
+    let pt_number = mem::SATP_SV39 | (page_table_ptr as usize) / alloc::PAGE_SIZE;
 
     // TODO: インデックスがPidになるのは一時的な実装
     // → これはProcState::Exitedを導入して被らないようにしている
@@ -303,7 +303,7 @@ fn map_user_pages(
             let pages_num = seg.memsz.div_ceil(alloc::PAGE_SIZE);
 
             // マッピング先の領域を取得
-            let page_ptr = allocator.alloc_pages(pages_num).unwrap() as *mut u8;
+            let page_ptr = allocator.alloc_pages::<u8>(pages_num).as_mut_ptr();
             let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
 
             // ユーザープログラムのデータをコピー
@@ -466,11 +466,11 @@ pub fn create_idle_process(allocator: &mut alloc::Allocator) {
 
     // カーネルスタック領域の取得
     let page_count = 1;
-    let kernel_stack_base = allocator.alloc_pages(page_count).unwrap() as *mut u8;
+    let kernel_stack_base = allocator.alloc_pages::<u8>(page_count).as_mut_ptr();
     let kernel_stack_size = alloc::PAGE_SIZE * page_count;
 
     // ページテーブルの作成
-    let page_table_ptr = allocator.alloc_pages(1).unwrap() as *mut usize;
+    let page_table_ptr = allocator.alloc_pages::<usize>(1).as_mut_ptr();
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
     let pt_number = mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / alloc::PAGE_SIZE;
 

@@ -35,7 +35,7 @@ pub fn map_page(
     let vpn2 = vaddr >> 30 & VPN_MASK;
     if table2[vpn2] & PageFlags::V.bits() == 0 {
         // このエントリに対応する2段目のページテーブルが存在しないので作成する
-        let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
+        let pt_paddr = alloc.alloc_pages::<usize>(1).as_mut_ptr() as usize;
         table2[vpn2] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 
@@ -53,7 +53,7 @@ pub fn map_page(
     };
     if table1[vpn1] & PageFlags::V.bits() == 0 {
         // このエントリに対応する1段目のページテーブルが存在しないので作成する
-        let pt_paddr = alloc.alloc_pages(1).expect("alloc page failed") as usize;
+        let pt_paddr = alloc.alloc_pages::<usize>(1).as_mut_ptr() as usize;
         table1[vpn1] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 

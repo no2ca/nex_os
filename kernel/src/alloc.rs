@@ -1,16 +1,6 @@
-use crate::println;
-use core::ptr;
+use core::{ptr, slice};
 
-const DEBUG_ALLOC: bool = false;
 pub const PAGE_SIZE: usize = 4096;
-
-#[derive(Debug)]
-pub enum AllocError {
-    OutOfMemory, // メモリが足りない
-    OverFlow,    // 確保するアドレスの計算でオーバーフローした
-}
-
-pub type AllocResult<T> = Result<T, AllocError>;
 
 unsafe extern "C" {
     pub static __free_ram: u8;
@@ -29,33 +19,25 @@ impl Allocator {
     }
 
     /// nページ分のメモリを割り当てて、その先頭アドレスを返す
-    pub fn alloc_pages(&mut self, n: usize) -> AllocResult<*const u8> {
-        let paddr: *mut u8;
+    pub fn alloc_pages<T>(&mut self, n: usize) -> &mut [T] {
+        // 確保するバイト数の計算
+        let offset = match n.checked_mul(PAGE_SIZE) {
+            Some(offset) => offset,
+            None => panic!("Page calculation overflowed!"),
+        };
+
         unsafe {
-            let end = &__free_ram_end as *const u8;
-            paddr = self.next_paddr as *mut u8;
-            let offset = match n.checked_mul(PAGE_SIZE) {
-                Some(offset) => offset,
-                None => return Err(AllocError::OverFlow),
-            };
+            // 確保する分を足して次の始点を更新
             self.next_paddr = self.next_paddr.add(offset);
+            let end = &__free_ram_end as *const u8;
             if self.next_paddr > end {
-                return Err(AllocError::OutOfMemory);
+                panic!("Out of memory!")
             }
-            ptr::write_bytes(paddr, 0, n * PAGE_SIZE);
-            let free_area =
-                (self.next_paddr as usize).saturating_sub(&__free_ram as *const u8 as usize);
-            let all_pages = 32 * 1024 * 1024 / PAGE_SIZE;
-            if DEBUG_ALLOC {
-                println!("[alloc]");
-                println!(
-                    "\tpages allocated\t\t: {}/{}",
-                    free_area / PAGE_SIZE,
-                    all_pages
-                );
-                println!("\tallocated at\t\t: {:p}", paddr);
-            }
+
+            // 確保する領域をゼロクリアする
+            let start = self.next_paddr as *mut T;
+            ptr::write_bytes(start, 0, offset);
+            slice::from_raw_parts_mut(start, offset)
         }
-        Ok(paddr)
     }
 }
