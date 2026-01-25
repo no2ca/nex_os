@@ -15,11 +15,11 @@ pub fn builtin_ohgiri() {
 pub fn builtin_help() {
     let help_msg = "
 Available commands:
-    help:\tHelp comammd (this command)
-    hello:\tJust says 'hello'
-    echo:\tBuiltin echo command
-    history:\tShow history
-    yield:\tYields current process
+    help\t: Help comammd (this command)
+    hello\t: Just says 'hello'
+    echo\t: Builtin echo command
+    history\t: Show history
+    yield\t: Yields current process
 ";
     println!("{}", help_msg);
 }
