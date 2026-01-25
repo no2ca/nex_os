@@ -9,7 +9,8 @@ pub trait Fs {
 
 pub trait Node {
     fn get_id(&self) -> usize;
-    fn prefix(&self) -> &'static [u8];
+    fn size(&self) -> usize;
+    fn read(&self, buf: &mut [u8]) -> Result<(), ()>;
 }
 
 pub struct MemoryFs;
@@ -35,8 +36,16 @@ impl Node for MemoryNode {
         self.id
     }
 
-    fn prefix(&self) -> &'static [u8] {
-        self.prefix
+    fn size(&self) -> usize {
+        self.prefix.len()
+    }
+
+    fn read(&self, buf: &mut [u8]) -> Result<(), ()> {
+        if buf.len() < self.prefix.len() {
+            return Err(());
+        }
+        buf[0..self.size()].copy_from_slice(self.prefix);
+        Ok(())
     }
 }
 

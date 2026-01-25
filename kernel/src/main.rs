@@ -40,9 +40,13 @@ fn dump_main_info() {
     }
 }
 
+static mut buf: [u8; 1024 * 1024 * 6] = [0u8; 1024 * 1024 * 6];
 fn test_vfs<F: Fs>(fs: F) {
     let node: F::NodeType = fs.lookup("shell").unwrap();
-    println!("id={:?}, ref={:p}", node.get_id(), node.prefix());
+    unsafe {
+        node.read(&mut *&raw mut buf).unwrap();
+    }
+    println!("id={:?}", node.get_id());
 }
 
 fn main() {
@@ -52,8 +56,7 @@ fn main() {
     test_vfs(vfs::MemoryFs);
 
     proc::create_idle_process(&mut allocator);
-    proc::create_process(SHELL_ELF, &mut allocator);
-    proc::create_process(SHELL_ELF, &mut allocator);
+    unsafe { proc::create_process(&*&raw const buf, &mut allocator) };
     proc::dump_process_list();
     proc::start_process();
     unreachable!()
