@@ -189,18 +189,20 @@ impl ProcessTable {
     }
 }
 
-pub fn dump_process_list() {
+pub fn dump_process_list(verdose: bool) {
     println!("[proc] process list:");
     let ptable = unsafe { PTABLE.get() };
     for proc in ptable.procs.iter() {
-        println!(
-            "\tpid={}, state={:?}, ra={:p}, entry={:p}, sp={:p}",
-            proc.pid.as_usize(),
-            proc.state,
-            proc.context.ra as *const u8,
-            proc.entry_point as *const u8,
-            proc.context.sp as *const u8,
-        );
+        if proc.state != ProcState::Unused || verdose {
+            println!(
+                "\tpid={}, state={:?}, ra={:p}, entry={:p}, sp={:p}",
+                proc.pid.as_usize(),
+                proc.state,
+                proc.context.ra as *const u8,
+                proc.entry_point as *const u8,
+                proc.context.sp as *const u8,
+            );
+        }
     }
 }
 

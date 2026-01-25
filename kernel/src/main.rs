@@ -46,18 +46,18 @@ fn test_vfs<F: Fs>(fs: F) {
     unsafe {
         node.read(&mut *&raw mut buf).unwrap();
     }
-    println!("id={:?}", node.get_id());
+    println!("[test_vfs] id={:?}", node.get_id());
 }
 
 fn main() {
     dump_main_info();
-    let mut allocator = Allocator::new();
-
     test_vfs(vfs::MemoryFs);
 
+    let mut allocator = Allocator::new();
     proc::create_idle_process(&mut allocator);
     unsafe { proc::create_process(&*&raw const buf, &mut allocator) };
-    proc::dump_process_list();
+    proc::dump_process_list(false);
     proc::start_process();
+
     unreachable!()
 }
