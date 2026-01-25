@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::alloc::{self, PAGE_SIZE};
+use crate::allocator::{self, PAGE_SIZE};
 use crate::utils::is_aligned;
 
 pub const SATP_SV39: usize = 8 << 60;
@@ -22,7 +22,7 @@ pub fn map_page(
     vaddr: usize,
     paddr: usize,
     flags: PageFlags,
-    alloc: &mut alloc::Allocator,
+    alloc: &mut allocator::Allocator,
 ) {
     if !is_aligned(vaddr, PAGE_SIZE) {
         panic!("vaddr={:p} is not aligned", vaddr as *const u8);

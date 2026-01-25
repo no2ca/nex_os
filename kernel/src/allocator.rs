@@ -1,5 +1,5 @@
-use core::{ptr, slice};
-
+use core::{alloc::{GlobalAlloc, Layout}, cell::UnsafeCell, ptr, slice};
+extern crate alloc;
 pub const PAGE_SIZE: usize = 4096;
 
 unsafe extern "C" {
@@ -40,4 +40,37 @@ impl Allocator {
             slice::from_raw_parts_mut(start, offset)
         }
     }
+}
+
+#[global_allocator]
+static HEAP: BumpPointerAlloc = BumpPointerAlloc {
+    head: UnsafeCell::new(0x2000_0100),
+    end: 0x2000_0200,
+};
+
+struct BumpPointerAlloc {
+    head: UnsafeCell<usize>,
+    end: usize,
+}
+
+unsafe impl Sync for BumpPointerAlloc {}
+
+unsafe impl GlobalAlloc for BumpPointerAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let head = self.head.get();
+
+        let align = layout.align();
+        unsafe {
+            let res = *head % align;
+            let start = if res == 0 { *head } else { *head + align - res };
+            if start + align > self.end {
+                ptr::null_mut()
+            } else {
+                *head = start + align;
+                start as *mut u8
+            }
+        }
+    }
+
+    unsafe fn dealloc(&self, _: *mut u8, _: Layout) {}
 }

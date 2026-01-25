@@ -4,7 +4,7 @@
 #![feature(naked_functions_rustic_abi)]
 #![feature(unsafe_cell_access)]
 
-mod alloc;
+mod allocator;
 mod boot;
 mod console;
 mod csr;
@@ -17,7 +17,7 @@ mod utils;
 mod vfs;
 
 use crate::{
-    alloc::{__free_ram, Allocator},
+    allocator::{__free_ram, Allocator},
     csr::{Csr, read_csr},
     trap::kernel_entry,
     vfs::{Fs, Node},
