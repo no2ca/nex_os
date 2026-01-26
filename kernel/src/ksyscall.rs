@@ -2,7 +2,9 @@ use crate::{
     console::{self, Writer},
     proc,
 };
-use syscall::{SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS};
+use syscall::{
+    SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS,
+};
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
 #[allow(unused)]
@@ -65,6 +67,9 @@ pub fn handle_syscall(trap_frame: *mut u8) {
         }
         SYS_EXIT_PROCESS => {
             proc::end_process();
+        }
+        SYS_CREATE_PROCESS => {
+            todo!()
         }
         _ => unimplemented!("{}", sysno),
     }
