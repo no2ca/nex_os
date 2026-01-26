@@ -7,8 +7,10 @@ pub const PAGE_SIZE: usize = 4096;
 extern crate alloc;
 
 unsafe extern "C" {
-    pub static __free_ram: u8;
-    pub static __free_ram_end: u8;
+    pub static __page_area_start: u8;
+    pub static __page_area_end: u8;
+    pub static __heap_start: u8;
+    pub static __heap_end: u8;
 }
 
 pub struct Allocator {
@@ -18,7 +20,7 @@ pub struct Allocator {
 impl Allocator {
     pub fn new() -> Self {
         Allocator {
-            next_paddr: unsafe { &__free_ram as *const u8 },
+            next_paddr: unsafe { &__page_area_start as *const u8 },
         }
     }
 
@@ -35,7 +37,7 @@ impl Allocator {
             let start_paddr = self.next_paddr;
             // 確保する分を足して次の始点を更新
             self.next_paddr = self.next_paddr.add(offset);
-            let end = &__free_ram_end as *const u8;
+            let end = &__page_area_end as *const u8;
             if self.next_paddr > end {
                 panic!("Out of memory!")
             }
@@ -67,8 +69,8 @@ impl BumpPointerAlloc {
 
     pub fn init_heap(&self) {
         unsafe {
-            let head = &__free_ram as *const _ as usize;
-            let end = &__free_ram_end as *const _ as usize;
+            let head = &__heap_start as *const _ as usize;
+            let end = &__heap_end as *const _ as usize;
             *self.head.get() = head.into();
             *self.end.get() = end.into();
         }

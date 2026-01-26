@@ -282,7 +282,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloca
 fn map_kernel_pages(page_table: &mut [usize], allocator: &mut allocator::Allocator) {
     let flags = PageFlags::R | PageFlags::W | PageFlags::X;
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
-    let end_paddr = unsafe { &allocator::__free_ram_end as *const u8 as usize };
+    let end_paddr = unsafe { &allocator::__heap_end as *const u8 as usize };
     let mut paddr = start_paddr;
     while paddr < end_paddr {
         mem::map_page(page_table, paddr, paddr, flags, allocator);
