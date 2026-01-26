@@ -17,7 +17,7 @@ mod utils;
 mod vfs;
 
 use crate::{
-    allocator::{__free_ram, Allocator},
+    allocator::Allocator,
     csr::{Csr, read_csr},
     trap::kernel_entry,
     vfs::{Fs, Node},
@@ -35,9 +35,6 @@ fn dump_main_info() {
         "[main_info] stvec register\t\t: {:#x}",
         read_csr(Csr::Stvec)
     );
-    unsafe {
-        println!("[main_info] free ram start\t\t: {:p}", &__free_ram);
-    }
 }
 
 static mut buf: [u8; 1024 * 1024 * 6] = [0u8; 1024 * 1024 * 6];
@@ -53,7 +50,7 @@ fn main() {
     dump_main_info();
     test_vfs(vfs::MemoryFs);
 
-    // ALLOC.init_heap();
+    allocator::ALLOC.init_heap();
     let mut allocator = Allocator::new();
     proc::create_idle_process(&mut allocator);
     unsafe { proc::create_process(&*&raw const buf, &mut allocator) };

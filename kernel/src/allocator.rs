@@ -1,5 +1,10 @@
-use core::{ptr, slice};
+use core::{
+    alloc::{GlobalAlloc, Layout},
+    cell::UnsafeCell,
+    ptr, slice,
+};
 pub const PAGE_SIZE: usize = 4096;
+extern crate alloc;
 
 unsafe extern "C" {
     pub static __free_ram: u8;
@@ -44,50 +49,50 @@ impl Allocator {
     }
 }
 
-// #[global_allocator]
-// pub static ALLOC: BumpPointerAlloc = BumpPointerAlloc::uninit();
+#[global_allocator]
+pub static ALLOC: BumpPointerAlloc = BumpPointerAlloc::uninit();
 
-// pub struct BumpPointerAlloc {
-//     head: UnsafeCell<usize>,
-//     end: UnsafeCell<usize>,
-// }
+pub struct BumpPointerAlloc {
+    head: UnsafeCell<usize>,
+    end: UnsafeCell<usize>,
+}
 
-// impl BumpPointerAlloc {
-//     const fn uninit() -> Self {
-//         Self {
-//             head: UnsafeCell::new(0),
-//             end: UnsafeCell::new(0),
-//         }
-//     }
+impl BumpPointerAlloc {
+    const fn uninit() -> Self {
+        Self {
+            head: UnsafeCell::new(0),
+            end: UnsafeCell::new(0),
+        }
+    }
 
-//     pub fn init_heap(&self) {
-//         unsafe {
-//             let head = &__free_ram as *const _ as usize;
-//             let end = &__free_ram_end as *const _ as usize;
-//             *self.head.get() = head.into();
-//             *self.end.get() = end.into();
-//         }
-//     }
-// }
+    pub fn init_heap(&self) {
+        unsafe {
+            let head = &__free_ram as *const _ as usize;
+            let end = &__free_ram_end as *const _ as usize;
+            *self.head.get() = head.into();
+            *self.end.get() = end.into();
+        }
+    }
+}
 
-// unsafe impl Sync for BumpPointerAlloc {}
+unsafe impl Sync for BumpPointerAlloc {}
 
-// unsafe impl GlobalAlloc for BumpPointerAlloc {
-//     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-//         let head = self.head.get();
+unsafe impl GlobalAlloc for BumpPointerAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let head = self.head.get();
 
-//         let align = layout.align();
-//         unsafe {
-//             let res = *head % align;
-//             let start = if res == 0 { *head } else { *head + align - res };
-//             if start + align > *self.end.get() {
-//                 ptr::null_mut()
-//             } else {
-//                 *head = start + align;
-//                 start as *mut u8
-//             }
-//         }
-//     }
+        let align = layout.align();
+        unsafe {
+            let res = *head % align;
+            let start = if res == 0 { *head } else { *head + align - res };
+            if start + align > *self.end.get() {
+                ptr::null_mut()
+            } else {
+                *head = start + align;
+                start as *mut u8
+            }
+        }
+    }
 
-//     unsafe fn dealloc(&self, _: *mut u8, _: Layout) {}
-// }
+    unsafe fn dealloc(&self, _: *mut u8, _: Layout) {}
+}
