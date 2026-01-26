@@ -472,7 +472,8 @@ pub fn create_idle_process(allocator: &mut allocator::Allocator) {
     // ページテーブルの作成
     let page_table_ptr = allocator.alloc_pages::<usize>(1).as_mut_ptr();
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
-    let pt_number = mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / allocator::PAGE_SIZE;
+    let pt_number =
+        mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / allocator::PAGE_SIZE;
 
     // カーネル空間をマッピング
     map_kernel_pages(page_table, allocator);
@@ -517,6 +518,5 @@ pub fn start_process() {
         csr::write_csr(csr::Csr::Sepc, entry_point);
     }
     let ctx = &next.context;
-
     _start_proc(ctx);
 }

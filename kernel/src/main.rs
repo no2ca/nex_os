@@ -17,7 +17,7 @@ mod utils;
 mod vfs;
 
 use crate::{
-    allocator::{__free_ram, ALLOC, Allocator},
+    allocator::{__free_ram, Allocator},
     csr::{Csr, read_csr},
     trap::kernel_entry,
     vfs::{Fs, Node},
@@ -53,7 +53,7 @@ fn main() {
     dump_main_info();
     test_vfs(vfs::MemoryFs);
 
-    ALLOC.init_heap();
+    // ALLOC.init_heap();
     let mut allocator = Allocator::new();
     proc::create_idle_process(&mut allocator);
     unsafe { proc::create_process(&*&raw const buf, &mut allocator) };
