@@ -43,14 +43,29 @@ impl Allocator {
 }
 
 #[global_allocator]
-static HEAP: BumpPointerAlloc = BumpPointerAlloc {
-    head: UnsafeCell::new(0x2000_0100),
-    end: 0x2000_0200,
-};
+pub static ALLOC: BumpPointerAlloc = BumpPointerAlloc::uninit();
 
-struct BumpPointerAlloc {
+pub struct BumpPointerAlloc {
     head: UnsafeCell<usize>,
-    end: usize,
+    end: UnsafeCell<usize>,
+}
+
+impl BumpPointerAlloc {
+    const fn uninit() -> Self {
+        Self { 
+            head: UnsafeCell::new(0), 
+            end: UnsafeCell::new(0),
+        }
+    }
+
+    pub fn init_heap(&self) {
+        unsafe {
+            let head = &__free_ram as *const _ as usize;
+            let end   = &__free_ram_end as *const _ as usize;
+            *self.head.get() = head.into();
+            *self.end.get() = end.into();
+        }
+    }
 }
 
 unsafe impl Sync for BumpPointerAlloc {}
@@ -63,7 +78,7 @@ unsafe impl GlobalAlloc for BumpPointerAlloc {
         unsafe {
             let res = *head % align;
             let start = if res == 0 { *head } else { *head + align - res };
-            if start + align > self.end {
+            if start + align > *self.end.get() {
                 ptr::null_mut()
             } else {
                 *head = start + align;
