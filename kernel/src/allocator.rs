@@ -13,13 +13,13 @@ unsafe extern "C" {
     pub static __heap_end: u8;
 }
 
-pub struct Allocator {
+pub struct PageAllocator {
     next_paddr: *const u8,
 }
 
-impl Allocator {
+impl PageAllocator {
     pub fn new() -> Self {
-        Allocator {
+        PageAllocator {
             next_paddr: unsafe { &__page_area_start as *const u8 },
         }
     }

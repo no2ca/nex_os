@@ -22,7 +22,7 @@ pub fn map_page(
     vaddr: usize,
     paddr: usize,
     flags: PageFlags,
-    alloc: &mut allocator::Allocator,
+    alloc: &mut allocator::PageAllocator,
 ) {
     if !is_aligned(vaddr, PAGE_SIZE) {
         panic!("vaddr={:p} is not aligned", vaddr as *const u8);

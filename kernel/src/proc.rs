@@ -235,7 +235,10 @@ fn schedule<'a>() -> &'a Process {
     return &procs[0];
 }
 
-fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut allocator::Allocator) {
+fn create_process_from_loaded(
+    loaded: loadelf::LoadedElf,
+    allocator: &mut allocator::PageAllocator,
+) {
     // プロセステーブルを &mut の参照で取得する
     // この参照のライフタイムは検証されないので, 複数つくらないようにする
     let procs = unsafe { PTABLE.get_mut().procs_mut() };
@@ -279,7 +282,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf, allocator: &mut alloca
 
 /// カーネル空間のマッピングを行う関数
 /// カーネルの最初からallocatorが確保できる領域の最後までを一対一でマップする
-fn map_kernel_pages(page_table: &mut [usize], allocator: &mut allocator::Allocator) {
+fn map_kernel_pages(page_table: &mut [usize], allocator: &mut allocator::PageAllocator) {
     let flags = PageFlags::R | PageFlags::W | PageFlags::X;
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
     let end_paddr = unsafe { &allocator::__heap_end as *const u8 as usize };
@@ -295,7 +298,7 @@ fn map_kernel_pages(page_table: &mut [usize], allocator: &mut allocator::Allocat
 fn map_user_pages(
     loaded: &loadelf::LoadedElf,
     page_table: &mut [usize],
-    allocator: &mut allocator::Allocator,
+    allocator: &mut allocator::PageAllocator,
 ) {
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
@@ -425,7 +428,7 @@ extern "C" fn _start_proc(ctx: *const Context) {
 //
 
 /// プロセスを生成する関数
-pub fn create_process(elf_data: &'static [u8], allocator: &mut allocator::Allocator) {
+pub fn create_process(elf_data: &'static [u8], allocator: &mut allocator::PageAllocator) {
     let loaded = loadelf::load_elf(elf_data);
     create_process_from_loaded(loaded, allocator);
 }
@@ -461,7 +464,7 @@ pub fn end_process() {
 }
 
 /// idleプロセスを作成する関数
-pub fn create_idle_process(allocator: &mut allocator::Allocator) {
+pub fn create_idle_process(allocator: &mut allocator::PageAllocator) {
     let proc = unsafe { &mut PTABLE.get_mut().procs_mut()[0] };
 
     // カーネルスタック領域の取得

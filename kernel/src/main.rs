@@ -16,8 +16,10 @@ mod trap;
 mod utils;
 mod vfs;
 
+use core::slice;
+
 use crate::{
-    allocator::Allocator,
+    allocator::{PAGE_SIZE, PageAllocator},
     csr::{Csr, read_csr},
     trap::kernel_entry,
     vfs::{Fs, Node},
@@ -37,25 +39,27 @@ fn dump_main_info() {
     );
 }
 
-static mut buf: [u8; 1024 * 1024 * 6] = [0u8; 1024 * 1024 * 6];
-fn test_vfs<F: Fs>(fs: F) {
+fn test_vfs<'a, F: Fs>(fs: F, page_allocator: &mut PageAllocator) -> &'a mut [u8] {
     let node: F::NodeType = fs.lookup("shell").unwrap();
-    unsafe {
-        node.read(&mut *&raw mut buf).unwrap();
-    }
+    let n = node.size().div_ceil(PAGE_SIZE);
+    let buf_ptr = page_allocator.alloc_pages::<u8>(n).as_mut_ptr();
+    let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
+    node.read(buf).unwrap();
     println!("[test_vfs] id={:?}", node.get_id());
+    buf
 }
 
 fn main() {
     dump_main_info();
-    test_vfs(vfs::MemoryFs);
 
     allocator::ALLOC.init_heap();
-    let mut allocator = Allocator::new();
+    let mut allocator = PageAllocator::new();
+
     proc::create_idle_process(&mut allocator);
-    unsafe { proc::create_process(&*&raw const buf, &mut allocator) };
+    let buf = test_vfs(vfs::MemoryFs, &mut allocator);
+    proc::create_process(buf, &mut allocator);
+
     proc::dump_process_list(false);
     proc::start_process();
-
     unreachable!()
 }
