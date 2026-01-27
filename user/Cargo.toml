@@ -9,6 +9,12 @@ path = "sh.rs"
 test = false
 bench = false
 
+[[bin]]
+name = "ps"
+path = "ps.rs"
+test = false
+bench = false
+
 [dependencies]
 syscall = { path = "../syscall" }
 userlib = { path = "../userlib" }

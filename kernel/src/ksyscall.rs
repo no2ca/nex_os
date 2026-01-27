@@ -8,7 +8,8 @@ use crate::{
     vfs::{self, Fs, Node},
 };
 use syscall::{
-    SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS,
+    SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_LIST_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE,
+    SYS_YIELD_PROCESS,
 };
 use zerocopy::{AsBytes, FromBytes, FromZeroes};
 
@@ -103,6 +104,9 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
             node.read(buf).unwrap();
             proc::create_process(buf);
+        }
+        SYS_LIST_PROCESS => {
+            proc::dump_process_list(false);
         }
         _ => unimplemented!("{}", sysno),
     }

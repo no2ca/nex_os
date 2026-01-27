@@ -2,7 +2,8 @@
 #![no_main]
 use core::{arch::asm, panic::PanicInfo};
 use syscall::{
-    SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS,
+    SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_LIST_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE,
+    SYS_YIELD_PROCESS,
 };
 
 #[panic_handler]
@@ -128,4 +129,8 @@ pub fn spawn(path: &str) -> Result<(), isize> {
         yield_process()?;
     }
     Ok(())
+}
+
+pub fn list_process() -> Result<(), isize> {
+    syscall(SYS_LIST_PROCESS, 0, 0, 0).map(|_| ())
 }

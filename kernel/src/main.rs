@@ -26,7 +26,8 @@ use crate::{
 };
 
 #[unsafe(no_mangle)]
-pub static SHELL_ELF: &[u8] = include_bytes!("../../sh.elf");
+pub static SH_ELF: &[u8] = include_bytes!("../../sh.elf");
+pub static PS_ELF: &[u8] = include_bytes!("../../ps.elf");
 
 fn dump_main_info() {
     println!(

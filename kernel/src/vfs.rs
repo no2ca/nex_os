@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::SHELL_ELF;
+use crate::{PS_ELF, SH_ELF};
 
 pub trait Fs {
     type NodeType: Node;
@@ -19,7 +19,8 @@ impl Fs for MemoryFs {
     type NodeType = MemoryNode;
     fn lookup(&self, name: &str) -> Option<Self::NodeType> {
         match name {
-            "sh" => Some(MemoryNode::new(0, SHELL_ELF)),
+            "sh" => Some(MemoryNode::new(0, SH_ELF)),
+            "ps" => Some(MemoryNode::new(1, PS_ELF)),
             _ => None,
         }
     }

@@ -5,3 +5,4 @@ pub const SYS_READ_BYTE: usize = 2;
 pub const SYS_YIELD_PROCESS: usize = 3;
 pub const SYS_EXIT_PROCESS: usize = 4;
 pub const SYS_CREATE_PROCESS: usize = 5;
+pub const SYS_LIST_PROCESS: usize = 6;
