@@ -38,7 +38,7 @@ impl Console {
         let mut index = 0;
         let mut hstry_idx = self.count;
         loop {
-            let c = read_byte();
+            let c = read_byte().map_err(ReadLineError::Syscall)?;
             match c {
                 // 改行キーが押されたとき
                 b'\r' => {
@@ -52,22 +52,22 @@ impl Console {
                         self.buf[index - 1] = 0;
                         index -= 1;
                         // カーソルを左に1つ動かす
-                        Writer::write_byte(0x8);
+                        Writer::write_byte(0x8).map_err(ReadLineError::Syscall)?;
                         // 消したい文字をスペースで置き換える
-                        Writer::write_byte(0x20);
+                        Writer::write_byte(0x20).map_err(ReadLineError::Syscall)?;
                         // カーソルを左に動かして入力できるようにする
-                        Writer::write_byte(0x8);
+                        Writer::write_byte(0x8).map_err(ReadLineError::Syscall)?;
                     }
                     continue;
                 }
                 // エスケープ文字のとき
                 0x1b => {
-                    let c2 = read_byte();
-                    let c3 = read_byte();
+                    let c2 = read_byte().map_err(ReadLineError::Syscall)?;
+                    let c3 = read_byte().map_err(ReadLineError::Syscall)?;
                     // 上向き矢印のとき
                     if c2 == b'[' && c3 == b'A' {
                         hstry_idx = hstry_idx.saturating_sub(1);
-                        self.show_history_inline(index, hstry_idx);
+                        self.show_history_inline(index, hstry_idx)?;
                         index = self.history_len[hstry_idx];
                     }
                     // 下向き矢印のとき
@@ -77,7 +77,7 @@ impl Console {
                         if hstry_idx < self.count {
                             hstry_idx += 1;
                         }
-                        self.show_history_inline(index, hstry_idx);
+                        self.show_history_inline(index, hstry_idx)?;
                         index = self.history_len[hstry_idx];
                         // println!("[debug] hstry_idx={}", hstry_idx);
                     }
@@ -91,7 +91,7 @@ impl Console {
             } else {
                 return Err(ReadLineError::Overflow);
             }
-            Writer::write_byte(c);
+            Writer::write_byte(c).map_err(ReadLineError::Syscall)?;
             index += 1;
         }
 
@@ -116,7 +116,7 @@ impl Console {
         Ok(items)
     }
 
-    fn run_command(&self, cmd: [&str; ARGS_SIZE]) {
+    fn run_command(&self, cmd: [&str; ARGS_SIZE]) -> Result<(), ShellError> {
         let command = cmd[0];
         match command {
             "hello" => sh_cmd::builtin_hello(),
@@ -124,12 +124,17 @@ impl Console {
             "echo" => sh_cmd::builtin_echo(cmd),
             "history" => sh_cmd::builtin_history(&self.history, &self.history_len),
             "ohgiri" => sh_cmd::builtin_ohgiri(),
-            "yield" => sh_cmd::builtin_yield(),
-            "exit" => sh_cmd::builtin_exit(),
+            "yield" => sh_cmd::builtin_yield().map_err(ShellError::SyscallError)?,
+            "exit" => sh_cmd::builtin_exit().map_err(ShellError::SyscallError)?,
             _ => {
-                userlib::spawn(command);
+                let f = |sysret| {
+                    println!("{command}: command not found");
+                    ShellError::SyscallError(sysret)
+                };
+                userlib::spawn(command).map_err(f)?;
             }
         }
+        Ok(())
     }
 
     #[inline]
@@ -140,21 +145,22 @@ impl Console {
     }
 
     #[inline]
-    fn show_history_inline(&mut self, index: usize, hstry_idx: usize) {
+    fn show_history_inline(&mut self, index: usize, hstry_idx: usize) -> Result<(), ReadLineError> {
         for i in 0..index {
             // コンソールのクリア
-            Writer::write_byte(0x8);
-            Writer::write_byte(0x20);
-            Writer::write_byte(0x8);
+            Writer::write_byte(0x8).map_err(ReadLineError::Syscall)?;
+            Writer::write_byte(0x20).map_err(ReadLineError::Syscall)?;
+            Writer::write_byte(0x8).map_err(ReadLineError::Syscall)?;
             // バッファのクリア
             self.buf[i] = 0;
         }
         for i in 0..self.history_len[hstry_idx] {
             // コンソールの出力
-            Writer::write_byte(self.history[hstry_idx][i]);
+            Writer::write_byte(self.history[hstry_idx][i]).map_err(ReadLineError::Syscall)?;
             // バッファの出力
             self.buf[i] = self.history[hstry_idx][i];
         }
+        Ok(())
     }
 
     fn prompt(&mut self) -> Result<(), ShellError> {
@@ -167,7 +173,7 @@ impl Console {
         }
 
         let cmd = self.parse_input(input_len)?;
-        self.run_command(cmd);
+        self.run_command(cmd)?;
 
         self.save_history(input_len);
         self.count += 1;
@@ -205,18 +211,22 @@ enum ShellError {
     ReadLineError(#[from] ReadLineError),
     #[error("Parse Error: {0}")]
     ParseError(#[from] ParseError),
+    #[error("Syscall Error: {0}")]
+    SyscallError(isize),
 }
 
 /// 文字列取得に関するエラー
 #[derive(Debug)]
 enum ReadLineError {
     Overflow,
+    Syscall(isize),
 }
 
 impl Display for ReadLineError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
             ReadLineError::Overflow => write!(f, "buffer overflow (buffer size is {})", BUF_SIZE),
+            ReadLineError::Syscall(code) => write!(f, "syscall error: {code}"),
         }
     }
 }
@@ -268,7 +278,7 @@ fn test_echo() {
     cmd[0] = "echo";
     cmd[1] = "foo";
     let con = Console::new();
-    con.run_command(cmd);
+    con.run_command(cmd).unwrap();
     println!("[OK]");
 }
 
@@ -282,7 +292,7 @@ fn test_many_echo() {
     cmd[3] = "hoge";
     cmd[4] = "piyo";
     let con = Console::new();
-    con.run_command(cmd);
+    con.run_command(cmd).unwrap();
     println!("[OK]");
 }
 
@@ -297,7 +307,7 @@ fn test_history() {
         con.history[0][i] = b;
     }
     con.history_len[0] = dummy.len();
-    con.run_command(cmd);
+    con.run_command(cmd).unwrap();
     println!("[OK]");
 }
 
@@ -315,6 +325,6 @@ fn test_many_history() {
         }
         con.history_len[i] = dummy.len();
     }
-    con.run_command(cmd);
+    con.run_command(cmd).unwrap();
     println!("[OK]");
 }

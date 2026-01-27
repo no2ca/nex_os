@@ -16,7 +16,7 @@ fn panic(info: &PanicInfo) -> ! {
 // システムコール
 //
 
-fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
+fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> Result<isize, isize> {
     let sysret: isize;
     unsafe {
         asm!(
@@ -28,31 +28,36 @@ fn syscall(sysno: usize, arg0: usize, arg1: usize, arg2: usize) -> isize {
             lateout("a0") sysret,
         );
     }
-    sysret
+    if sysret == -1 {
+        Err(sysret)
+    } else {
+        Ok(sysret)
+    }
 }
 
 //
 // コンソール入出力
 //
 
-pub fn read_byte() -> u8 {
-    let ret = syscall(SYS_READ_BYTE, 0, 0, 0);
-    u8::try_from(ret).unwrap()
+pub fn read_byte() -> Result<u8, isize> {
+    let ret = syscall(SYS_READ_BYTE, 0, 0, 0)?;
+    u8::try_from(ret).map_err(|_| -1)
 }
 
 pub struct Writer;
 
 impl Writer {
-    pub fn write_byte(c: u8) {
-        // TODO: システムコールに失敗したときのエラー処理を行っていない
-        syscall(SYS_WRITE_BYTE, c as usize, 0, 0);
+    pub fn write_byte(c: u8) -> Result<(), isize> {
+        syscall(SYS_WRITE_BYTE, c as usize, 0, 0).map(|_| ())
     }
 }
 
 use core::fmt;
 impl fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        s.bytes().for_each(|c| Writer::write_byte(c));
+        for c in s.bytes() {
+            Writer::write_byte(c).map_err(|_| fmt::Error)?;
+        }
         Ok(())
     }
 }
@@ -103,22 +108,24 @@ macro_rules! user_main {
 // プロセス関連
 //
 
-pub fn yield_process() {
-    syscall(SYS_YIELD_PROCESS, 0, 0, 0);
+pub fn yield_process() -> Result<(), isize> {
+    syscall(SYS_YIELD_PROCESS, 0, 0, 0).map(|_| ())
 }
 
-pub fn exit_process() {
-    syscall(SYS_EXIT_PROCESS, 0, 0, 0);
+pub fn exit_process() -> Result<(), isize> {
+    syscall(SYS_EXIT_PROCESS, 0, 0, 0).map(|_| ())
 }
 
-fn create_process(path: &str) -> isize {
+fn create_process(path: &str) -> Result<isize, isize> {
     let ptr = path.as_ptr() as usize;
     let len = path.len();
     syscall(SYS_CREATE_PROCESS, ptr, len, 0)
 }
 
-pub fn spawn(path: &str) {
-    if create_process(path) >= 0 {
-        yield_process();
+pub fn spawn(path: &str) -> Result<(), isize> {
+    let pid = create_process(path)?;
+    if pid >= 0 {
+        yield_process()?;
     }
+    Ok(())
 }
