@@ -1,6 +1,6 @@
 cargo fmt --all
-cargo build --features shell-test --bin shell --target user/user-riscv64gc-unknown-none-elf.json
-cp ./target/user-riscv64gc-unknown-none-elf/debug/shell ./shell.elf
+cargo build --features shell-test --bin sh --target user/user-riscv64gc-unknown-none-elf.json
+cp ./target/user-riscv64gc-unknown-none-elf/debug/sh ./sh.elf
 
 cargo build -r --bin kernel --target kernel/kernel-riscv64gc-unknown-none-elf.json
 cp ./target/kernel-riscv64gc-unknown-none-elf/release/kernel ./kernel.elf
