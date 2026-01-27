@@ -1,6 +1,10 @@
+use core::slice;
+
 use crate::{
+    allocator::{self, PAGE_SIZE},
     console::{self, Writer},
     proc,
+    vfs::{self, Fs, Node},
 };
 use syscall::{
     SYS_CREATE_PROCESS, SYS_EXIT_PROCESS, SYS_READ_BYTE, SYS_WRITE_BYTE, SYS_YIELD_PROCESS,
@@ -69,7 +73,13 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             proc::end_process();
         }
         SYS_CREATE_PROCESS => {
-            todo!()
+            let fs = vfs::MemoryFs;
+            let node = fs.lookup("shell").unwrap();
+            let n = node.size().div_ceil(PAGE_SIZE);
+            let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
+            let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
+            node.read(buf).unwrap();
+            proc::create_process(buf);
         }
         _ => unimplemented!("{}", sysno),
     }
