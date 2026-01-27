@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-mod shell_cmd;
+mod sh_cmd;
 
 use core::{
     error,
@@ -118,14 +118,14 @@ impl Console {
 
     fn run_command(&self, cmd: [&str; ARGS_SIZE]) {
         match cmd[0] {
-            "hello" => shell_cmd::builtin_hello(),
-            "help" => shell_cmd::builtin_help(),
-            "echo" => shell_cmd::builtin_echo(cmd),
-            "history" => shell_cmd::builtin_history(&self.history, &self.history_len),
-            "ohgiri" => shell_cmd::builtin_ohgiri(),
-            "yield" => shell_cmd::builtin_yield(),
-            "exit" => shell_cmd::builtin_exit(),
-            "shell" => userlib::spawn(),
+            "hello" => sh_cmd::builtin_hello(),
+            "help" => sh_cmd::builtin_help(),
+            "echo" => sh_cmd::builtin_echo(cmd),
+            "history" => sh_cmd::builtin_history(&self.history, &self.history_len),
+            "ohgiri" => sh_cmd::builtin_ohgiri(),
+            "yield" => sh_cmd::builtin_yield(),
+            "exit" => sh_cmd::builtin_exit(),
+            "sh" => userlib::spawn(),
             _ => {
                 println!("{}: command not found", cmd[0]);
                 // println!("DEBUG: {:?}", command_str.as_bytes());
