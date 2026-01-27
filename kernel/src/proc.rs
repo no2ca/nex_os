@@ -147,7 +147,7 @@ impl<T> ProcessTableCell<T> {
     }
 }
 
-pub const NPROC: usize = 8;
+pub const NPROC: usize = 128;
 
 struct ProcessTable {
     procs: [Process; NPROC],
@@ -358,6 +358,7 @@ fn switch_context(prev: &mut Process, next: &Process) {
         // user_entryでsretしたときに最初に飛ぶアドレス
         csr::write_csr(csr::Csr::Sepc, entry_point);
     }
+    println!("[switch_context] time: {}", crate::timer::read_time());
     let prev_ctx = &mut prev.context;
     let next_ctx = &next.context;
     _swtch(prev_ctx, next_ctx);

@@ -12,6 +12,7 @@ mod ksyscall;
 mod loadelf;
 mod mem;
 mod proc;
+mod timer;
 mod trap;
 mod utils;
 mod vfs;
