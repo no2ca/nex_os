@@ -235,10 +235,7 @@ fn schedule<'a>() -> &'a Process {
     return &procs[0];
 }
 
-fn create_process_from_loaded(
-    loaded: loadelf::LoadedElf,
-    allocator: &mut allocator::PageAllocator,
-) {
+fn create_process_from_loaded(loaded: loadelf::LoadedElf) {
     // プロセステーブルを &mut の参照で取得する
     // この参照のライフタイムは検証されないので, 複数つくらないようにする
     let procs = unsafe { PTABLE.get_mut().procs_mut() };
@@ -252,18 +249,20 @@ fn create_process_from_loaded(
 
     // カーネルスタック領域の取得
     let page_count = 1;
-    let kernel_stack_base = allocator.alloc_pages::<u8>(page_count).as_mut_ptr();
+    let kernel_stack_base = allocator::PAGE_ALLOC
+        .alloc_pages::<u8>(page_count)
+        .as_mut_ptr();
     let kernel_stack_size = allocator::PAGE_SIZE * page_count;
 
     // ページテーブルの作成
-    let page_table_ptr = allocator.alloc_pages::<usize>(1).as_mut_ptr();
+    let page_table_ptr = allocator::PAGE_ALLOC.alloc_pages::<usize>(1).as_mut_ptr();
     let page_table = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
 
     // カーネル空間をマッピング
-    map_kernel_pages(page_table, allocator);
+    map_kernel_pages(page_table);
 
     // ユーザー空間をマッピング
-    map_user_pages(&loaded, page_table, allocator);
+    map_user_pages(&loaded, page_table);
 
     let pt_number = mem::SATP_SV39 | (page_table_ptr as usize) / allocator::PAGE_SIZE;
 
@@ -282,31 +281,29 @@ fn create_process_from_loaded(
 
 /// カーネル空間のマッピングを行う関数
 /// カーネルの最初からallocatorが確保できる領域の最後までを一対一でマップする
-fn map_kernel_pages(page_table: &mut [usize], allocator: &mut allocator::PageAllocator) {
+fn map_kernel_pages(page_table: &mut [usize]) {
     let flags = PageFlags::R | PageFlags::W | PageFlags::X;
     let start_paddr = unsafe { &__kernel_base as *const u8 as usize };
     let end_paddr = unsafe { &allocator::__heap_end as *const u8 as usize };
     let mut paddr = start_paddr;
     while paddr < end_paddr {
-        mem::map_page(page_table, paddr, paddr, flags, allocator);
+        mem::map_page(page_table, paddr, paddr, flags);
         paddr += allocator::PAGE_SIZE;
     }
 }
 
 /// ユーザーのマッピングを行う関数
 /// allocatorが連続した領域を確保してくれることを前提にする
-fn map_user_pages(
-    loaded: &loadelf::LoadedElf,
-    page_table: &mut [usize],
-    allocator: &mut allocator::PageAllocator,
-) {
+fn map_user_pages(loaded: &loadelf::LoadedElf, page_table: &mut [usize]) {
     for maybe_seg in loaded.loadable_segments.iter() {
         if let Some(seg) = maybe_seg {
             // 必要なページ数を計算
             let pages_num = seg.memsz.div_ceil(allocator::PAGE_SIZE);
 
             // マッピング先の領域を取得
-            let page_ptr = allocator.alloc_pages::<u8>(pages_num).as_mut_ptr();
+            let page_ptr = allocator::PAGE_ALLOC
+                .alloc_pages::<u8>(pages_num)
+                .as_mut_ptr();
             let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
 
             // ユーザープログラムのデータをコピー
@@ -329,7 +326,7 @@ fn map_user_pages(
             for i in 0..pages_num {
                 let paddr = page_start_paddr + i * PAGE_SIZE;
                 let vaddr = page_start_vaddr + i * PAGE_SIZE;
-                mem::map_page(page_table, vaddr, paddr, user_flags, allocator);
+                mem::map_page(page_table, vaddr, paddr, user_flags);
             }
         }
     }
@@ -428,9 +425,9 @@ extern "C" fn _start_proc(ctx: *const Context) {
 //
 
 /// プロセスを生成する関数
-pub fn create_process(elf_data: &'static [u8], allocator: &mut allocator::PageAllocator) {
+pub fn create_process(elf_data: &'static [u8]) {
     let loaded = loadelf::load_elf(elf_data);
-    create_process_from_loaded(loaded, allocator);
+    create_process_from_loaded(loaded);
 }
 
 /// 現在のプロセス以外の実行可能プロセスに切り替える
@@ -464,22 +461,24 @@ pub fn end_process() {
 }
 
 /// idleプロセスを作成する関数
-pub fn create_idle_process(allocator: &mut allocator::PageAllocator) {
+pub fn create_idle_process() {
     let proc = unsafe { &mut PTABLE.get_mut().procs_mut()[0] };
 
     // カーネルスタック領域の取得
     let page_count = 1;
-    let kernel_stack_base = allocator.alloc_pages::<u8>(page_count).as_mut_ptr();
+    let kernel_stack_base = allocator::PAGE_ALLOC
+        .alloc_pages::<u8>(page_count)
+        .as_mut_ptr();
     let kernel_stack_size = allocator::PAGE_SIZE * page_count;
 
     // ページテーブルの作成
-    let page_table_ptr = allocator.alloc_pages::<usize>(1).as_mut_ptr();
+    let page_table_ptr = allocator::PAGE_ALLOC.alloc_pages::<usize>(1).as_mut_ptr();
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
     let pt_number =
         mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / allocator::PAGE_SIZE;
 
     // カーネル空間をマッピング
-    map_kernel_pages(page_table, allocator);
+    map_kernel_pages(page_table);
 
     proc.pid = Pid(0);
     proc.state = ProcState::Runnable;

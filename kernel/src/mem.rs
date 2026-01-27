@@ -17,13 +17,7 @@ bitflags! {
     }
 }
 
-pub fn map_page(
-    table2: &mut [usize],
-    vaddr: usize,
-    paddr: usize,
-    flags: PageFlags,
-    alloc: &mut allocator::PageAllocator,
-) {
+pub fn map_page(table2: &mut [usize], vaddr: usize, paddr: usize, flags: PageFlags) {
     if !is_aligned(vaddr, PAGE_SIZE) {
         panic!("vaddr={:p} is not aligned", vaddr as *const u8);
     }
@@ -35,7 +29,7 @@ pub fn map_page(
     let vpn2 = vaddr >> 30 & VPN_MASK;
     if table2[vpn2] & PageFlags::V.bits() == 0 {
         // このエントリに対応する2段目のページテーブルが存在しないので作成する
-        let pt_paddr = alloc.alloc_pages::<usize>(1).as_mut_ptr() as usize;
+        let pt_paddr = allocator::PAGE_ALLOC.alloc_pages::<usize>(1).as_mut_ptr() as usize;
         table2[vpn2] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 
@@ -53,7 +47,7 @@ pub fn map_page(
     };
     if table1[vpn1] & PageFlags::V.bits() == 0 {
         // このエントリに対応する1段目のページテーブルが存在しないので作成する
-        let pt_paddr = alloc.alloc_pages::<usize>(1).as_mut_ptr() as usize;
+        let pt_paddr = allocator::PAGE_ALLOC.alloc_pages::<usize>(1).as_mut_ptr() as usize;
         table1[vpn1] = (pt_paddr / PAGE_SIZE) << 10 | PageFlags::V.bits();
     }
 

@@ -19,7 +19,7 @@ mod vfs;
 use core::slice;
 
 use crate::{
-    allocator::{PAGE_SIZE, PageAllocator},
+    allocator::PAGE_SIZE,
     csr::{Csr, read_csr},
     trap::kernel_entry,
     vfs::{Fs, Node},
@@ -39,10 +39,10 @@ fn dump_main_info() {
     );
 }
 
-fn test_vfs<'a, F: Fs>(fs: F, page_allocator: &mut PageAllocator) -> &'a mut [u8] {
+fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
     let node: F::NodeType = fs.lookup("shell").unwrap();
     let n = node.size().div_ceil(PAGE_SIZE);
-    let buf_ptr = page_allocator.alloc_pages::<u8>(n).as_mut_ptr();
+    let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
     let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
     node.read(buf).unwrap();
     println!("[test_vfs] id={:?}", node.get_id());
@@ -53,11 +53,10 @@ fn main() {
     dump_main_info();
 
     allocator::ALLOC.init_heap();
-    let mut allocator = PageAllocator::new();
 
-    proc::create_idle_process(&mut allocator);
-    let buf = test_vfs(vfs::MemoryFs, &mut allocator);
-    proc::create_process(buf, &mut allocator);
+    proc::create_idle_process();
+    let buf = test_vfs(vfs::MemoryFs);
+    proc::create_process(buf);
 
     proc::dump_process_list(false);
     proc::start_process();

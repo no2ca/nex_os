@@ -18,7 +18,7 @@ pub struct PageAllocator {
 }
 
 impl PageAllocator {
-    pub fn new() -> Self {
+    pub const fn init() -> Self {
         PageAllocator {
             next_paddr: unsafe { &__page_area_start as *const u8 },
         }
@@ -50,6 +50,27 @@ impl PageAllocator {
         }
     }
 }
+
+pub struct GlobalPageAllocator {
+    inner: UnsafeCell<PageAllocator>,
+}
+
+unsafe impl Sync for GlobalPageAllocator {}
+
+impl GlobalPageAllocator {
+    pub const fn new() -> Self {
+        Self {
+            inner: UnsafeCell::new(PageAllocator::init()),
+        }
+    }
+
+    #[inline]
+    pub fn alloc_pages<T>(&self, n: usize) -> &mut [T] {
+        unsafe { (&mut *self.inner.get()).alloc_pages::<T>(n) }
+    }
+}
+
+pub static PAGE_ALLOC: GlobalPageAllocator = GlobalPageAllocator::new();
 
 #[global_allocator]
 pub static ALLOC: BumpPointerAlloc = BumpPointerAlloc::uninit();
