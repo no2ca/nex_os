@@ -106,7 +106,7 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             proc::create_process(buf);
         }
         SYS_LIST_PROCESS => {
-            proc::dump_process_list(false);
+            proc::show_process_list(false);
         }
         _ => unimplemented!("{}", sysno),
     }

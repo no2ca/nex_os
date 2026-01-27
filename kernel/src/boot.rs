@@ -34,7 +34,7 @@ pub extern "C" fn _start() {
 
         log_info!(
             "boot",
-            "kernel stack top\t\t: {:p}",
+            "kernel stack top\t: {:p}",
             &__stack_top as *const u8
         );
     }

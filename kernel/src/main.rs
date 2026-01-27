@@ -33,7 +33,7 @@ pub static PS_ELF: &[u8] = include_bytes!("../../ps.elf");
 
 fn dump_main_info() {
     log_info!("main", "kernel_entry\t\t: {:p}", kernel_entry as *const u8);
-    log_info!("main", "stvec register\t\t: {:#x}", read_csr(Csr::Stvec));
+    log_info!("main", "stvec register\t: {:#x}", read_csr(Csr::Stvec));
 }
 
 fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
@@ -47,7 +47,7 @@ fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
 }
 
 fn main() {
-    log::set_log_level(log::LogLevel::Trace);
+    log::set_log_level(log::LogLevel::Error);
     dump_main_info();
 
     allocator::ALLOC.init_heap();

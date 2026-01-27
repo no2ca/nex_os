@@ -28,6 +28,7 @@ pub fn read_time() -> u64 {
     value
 }
 
+#[allow(unused)]
 #[inline(always)]
 pub fn read_time_seconds() -> u64 {
     read_time() / TIMEBASE_HZ

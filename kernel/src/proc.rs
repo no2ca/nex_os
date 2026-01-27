@@ -116,7 +116,7 @@ impl Process {
 use crate::allocator::PAGE_SIZE;
 use crate::mem::{self, PageFlags};
 use crate::utils::align_up;
-use crate::{allocator, csr, loadelf, log_debug, log_info, log_trace, log_warn};
+use crate::{allocator, csr, loadelf, log_debug, log_info, log_warn, println};
 use core::arch::asm;
 use core::{arch::naked_asm, cell::UnsafeCell};
 use core::{slice, usize};
@@ -529,4 +529,15 @@ pub fn start_process() {
     }
     let ctx = &next.context;
     _start_proc(ctx);
+}
+
+pub fn show_process_list(verdose: bool) {
+    // PID列を右寄せにしてヘッダの"D"と1桁目を揃える
+    println!("\t{:>4}\t{:>6}", "PID", "State");
+    let ptable = unsafe { PTABLE.get() };
+    for proc in ptable.procs.iter() {
+        if proc.state != ProcState::Unused || verdose {
+            println!("\t{:>4}\t{:?}", proc.pid.as_usize(), proc.state,);
+        }
+    }
 }
