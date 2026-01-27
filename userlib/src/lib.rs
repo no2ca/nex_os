@@ -111,6 +111,11 @@ pub fn exit_process() {
     syscall(SYS_EXIT_PROCESS, 0, 0, 0);
 }
 
-pub fn create_process() {
+fn create_process() {
     syscall(SYS_CREATE_PROCESS, 0, 0, 0);
+}
+
+pub fn spawn() {
+    create_process();
+    yield_process();
 }
