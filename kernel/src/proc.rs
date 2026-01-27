@@ -336,13 +336,12 @@ fn map_user_pages(loaded: &loadelf::LoadedElf, page_table: &mut [usize]) {
 // コンテキストスイッチとユーザーモード切替
 //
 
-const SSTATUS_SPIE: usize = 1 << 5;
 extern "C" fn user_entry() {
     unsafe {
         asm!(
             "csrw sstatus, {0}",
             "sret",
-            in(reg) SSTATUS_SPIE,
+            in(reg) csr::SSTATUS_SPIE,
         );
     }
 }

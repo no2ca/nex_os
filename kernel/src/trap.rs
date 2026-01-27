@@ -96,7 +96,7 @@ pub extern "C" fn handle_trap(trap_frame: *mut u8) {
         crate::ksyscall::handle_syscall(trap_frame);
     } else {
         panic!(
-            "[TRAP ] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
+            "[TRAP] unexpected trap: scause={:x}, stval={:x}, sepc={:x}",
             scause, stval, user_pc
         );
     }

@@ -117,7 +117,8 @@ impl Console {
     }
 
     fn run_command(&self, cmd: [&str; ARGS_SIZE]) {
-        match cmd[0] {
+        let command = cmd[0];
+        match command {
             "hello" => sh_cmd::builtin_hello(),
             "help" => sh_cmd::builtin_help(),
             "echo" => sh_cmd::builtin_echo(cmd),
@@ -125,10 +126,8 @@ impl Console {
             "ohgiri" => sh_cmd::builtin_ohgiri(),
             "yield" => sh_cmd::builtin_yield(),
             "exit" => sh_cmd::builtin_exit(),
-            "sh" => userlib::spawn(),
             _ => {
-                println!("{}: command not found", cmd[0]);
-                // println!("DEBUG: {:?}", command_str.as_bytes());
+                userlib::spawn(command);
             }
         }
     }

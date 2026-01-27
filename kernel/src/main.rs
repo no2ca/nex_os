@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[unsafe(no_mangle)]
-pub static SHELL_ELF: &[u8] = include_bytes!("../../shell.elf");
+pub static SHELL_ELF: &[u8] = include_bytes!("../../sh.elf");
 
 fn dump_main_info() {
     println!(
@@ -40,7 +40,7 @@ fn dump_main_info() {
 }
 
 fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
-    let node: F::NodeType = fs.lookup("shell").unwrap();
+    let node: F::NodeType = fs.lookup("sh").unwrap();
     let n = node.size().div_ceil(PAGE_SIZE);
     let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
     let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };

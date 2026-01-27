@@ -1,5 +1,8 @@
 use core::arch::asm;
 
+pub const SSTATUS_SPIE: usize = 1 << 5;
+pub const SSTATUS_SUM: usize = 1 << 18;
+
 #[derive(Copy, Clone, Debug)]
 pub enum Csr {
     Stvec,
@@ -59,5 +62,19 @@ pub unsafe fn write_csr(csr: Csr, value: usize) {
             );
         },
         other => panic!("csr {:?} is not writable", other),
+    }
+}
+
+#[inline]
+pub unsafe fn set_sum() {
+    unsafe {
+        asm!("csrw sstatus, {0}", in(reg) SSTATUS_SPIE | SSTATUS_SUM);
+    }
+}
+
+#[inline]
+pub unsafe fn clear_sum() {
+    unsafe {
+        asm!("csrw sstatus, {0}", in(reg) SSTATUS_SPIE);
     }
 }

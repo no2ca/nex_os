@@ -19,8 +19,8 @@ impl Fs for MemoryFs {
     type NodeType = MemoryNode;
     fn lookup(&self, name: &str) -> Option<Self::NodeType> {
         match name {
-            "shell" => Some(MemoryNode::new(0, SHELL_ELF)),
-            _ => todo!(),
+            "sh" => Some(MemoryNode::new(0, SHELL_ELF)),
+            _ => None,
         }
     }
 }

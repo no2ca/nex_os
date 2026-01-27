@@ -1,9 +1,10 @@
 use core::slice;
+extern crate alloc;
 
 use crate::{
     allocator::{self, PAGE_SIZE},
     console::{self, Writer},
-    proc,
+    println, proc,
     vfs::{self, Fs, Node},
 };
 use syscall::{
@@ -52,17 +53,17 @@ pub fn handle_syscall(trap_frame: *mut u8) {
     let trap_frame_slice =
         unsafe { core::slice::from_raw_parts_mut(trap_frame, size_of::<TrapFrame>()) };
 
-    let trap_frame = TrapFrame::mut_from_prefix(trap_frame_slice).unwrap();
-    let sysno = trap_frame.a3;
+    let frame = TrapFrame::mut_from_prefix(trap_frame_slice).unwrap();
+    let sysno = frame.a3;
     match sysno {
         SYS_WRITE_BYTE => {
-            let c = u8::try_from(trap_frame.a0).unwrap();
+            let c = u8::try_from(frame.a0).unwrap();
             Writer::write_byte(c).unwrap();
         }
         SYS_READ_BYTE => loop {
             let byte = console::read_byte();
             if byte >= 0 {
-                trap_frame.a0 = byte as usize;
+                frame.a0 = byte as usize;
                 break;
             }
         },
@@ -73,8 +74,22 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             proc::end_process();
         }
         SYS_CREATE_PROCESS => {
+            let path_ptr = frame.a0 as *const u8;
+            let path_len = frame.a1;
+            let mut bytes = alloc::vec::Vec::with_capacity(path_len);
+
+            unsafe {
+                crate::csr::set_sum();
+                for i in 0..path_len {
+                    bytes.push(*path_ptr.add(i));
+                }
+                crate::csr::clear_sum();
+            }
+
+            let path = core::str::from_utf8(&bytes).unwrap();
+            println!("[ksyscall] path='{}'", path);
             let fs = vfs::MemoryFs;
-            let node = fs.lookup("shell").unwrap();
+            let node = fs.lookup(path).unwrap();
             let n = node.size().div_ceil(PAGE_SIZE);
             let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
             let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
