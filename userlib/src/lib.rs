@@ -111,13 +111,14 @@ pub fn exit_process() {
     syscall(SYS_EXIT_PROCESS, 0, 0, 0);
 }
 
-fn create_process(path: &str) {
+fn create_process(path: &str) -> isize {
     let ptr = path.as_ptr() as usize;
     let len = path.len();
-    syscall(SYS_CREATE_PROCESS, ptr, len, 0);
+    syscall(SYS_CREATE_PROCESS, ptr, len, 0)
 }
 
 pub fn spawn(path: &str) {
-    create_process(path);
-    yield_process();
+    if create_process(path) >= 0 {
+        yield_process();
+    }
 }

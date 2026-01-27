@@ -26,7 +26,7 @@ struct TrapFrame {
     t4: usize,
     t5: usize,
     t6: usize,
-    a0: usize,
+    a0: isize,
     a1: usize,
     a2: usize,
     a3: usize,
@@ -63,7 +63,7 @@ pub fn handle_syscall(trap_frame: *mut u8) {
         SYS_READ_BYTE => loop {
             let byte = console::read_byte();
             if byte >= 0 {
-                frame.a0 = byte as usize;
+                frame.a0 = byte as isize;
                 break;
             }
         },
@@ -89,7 +89,15 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             let path = core::str::from_utf8(&bytes).unwrap();
             println!("[ksyscall] path='{}'", path);
             let fs = vfs::MemoryFs;
-            let node = fs.lookup(path).unwrap();
+
+            let node = if let Some(node) = fs.lookup(path) {
+                node
+            } else {
+                println!("[ksyscall] file not found");
+                frame.a0 = -1;
+                return;
+            };
+
             let n = node.size().div_ceil(PAGE_SIZE);
             let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
             let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
