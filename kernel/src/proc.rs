@@ -20,6 +20,7 @@ impl Pid {
 enum ProcState {
     Unused,
     Runnable,
+    Running,
     Exited,
 }
 
@@ -221,7 +222,7 @@ fn schedule<'a>() -> &'a Process {
     let ptable = unsafe { PTABLE.get_mut() };
     let cur_idx = ptable.current;
 
-    let procs = &ptable.procs;
+    let procs = &mut ptable.procs;
     for i in 0..NPROC {
         let next_idx = (cur_idx + i + 1) % NPROC;
         let p = &procs[next_idx];
@@ -229,11 +230,19 @@ fn schedule<'a>() -> &'a Process {
             // 実行可能かつ0ではないプロセスが見つかった場合
             // インデックスを更新してPidを返す
             ptable.current = next_idx;
-            return p;
+            return &procs[next_idx];
         }
     }
     log_warn!("scheduler", "No runnable process found");
     return &procs[0];
+}
+
+/// # Safety
+/// schedule() で current を更新した直後に呼ぶこと
+fn mark_current_running() {
+    let ptable = unsafe { PTABLE.get_mut() };
+    let idx = ptable.current;
+    ptable.procs[idx].state = ProcState::Running;
 }
 
 fn create_process_from_loaded(loaded: loadelf::LoadedElf) {
@@ -351,6 +360,8 @@ extern "C" fn user_entry() {
     }
 }
 
+/// # Safety
+/// この関数内に状態を変更する処理を書かないこと
 fn switch_context(prev: &mut Process, next: &Process) {
     let pt_number = next.pt_number;
     let kernel_stack_top = next.kernel_stack.top();
@@ -438,7 +449,10 @@ pub fn create_process(elf_data: &'static [u8]) {
 ///
 /// 他に無い場合は同じプロセスが実行状態になる
 pub fn yield_process() {
+    // スケジュールより先に状態を変える必要がある
     let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
+    prev_proc.state = ProcState::Runnable;
+
     let next_proc = schedule();
 
     log_info!(
@@ -447,6 +461,8 @@ pub fn yield_process() {
         prev_proc.pid,
         next_proc.pid
     );
+
+    mark_current_running();
     switch_context(prev_proc, next_proc);
 }
 
@@ -465,6 +481,7 @@ pub fn end_process() {
         next_proc.pid
     );
 
+    mark_current_running();
     switch_context(prev_proc, next_proc);
 }
 
@@ -515,6 +532,8 @@ pub fn start_process() {
     if next.pid == Pid(0) {
         panic!("[start_process] no process to start")
     }
+
+    mark_current_running();
 
     let pt_number = next.pt_number;
     let kernel_stack_top = next.kernel_stack.top();
