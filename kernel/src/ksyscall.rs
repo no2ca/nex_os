@@ -4,7 +4,7 @@ extern crate alloc;
 use crate::{
     allocator::{self, PAGE_SIZE},
     console::{self, Writer},
-    println, proc,
+    log_info, log_warn, proc,
     vfs::{self, Fs, Node},
 };
 use syscall::{
@@ -88,13 +88,13 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             }
 
             let path = core::str::from_utf8(&bytes).unwrap();
-            println!("[ksyscall] path='{}'", path);
+            log_info!("ksyscall", "path='{}'", path);
             let fs = vfs::MemoryFs;
 
             let node = if let Some(node) = fs.lookup(path) {
                 node
             } else {
-                println!("[ksyscall] file not found");
+                log_warn!("ksyscall", "file not found");
                 frame.a0 = -1;
                 return;
             };

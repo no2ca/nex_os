@@ -10,6 +10,7 @@ mod console;
 mod csr;
 mod ksyscall;
 mod loadelf;
+mod log;
 mod mem;
 mod proc;
 mod timer;
@@ -31,14 +32,8 @@ pub static SH_ELF: &[u8] = include_bytes!("../../sh.elf");
 pub static PS_ELF: &[u8] = include_bytes!("../../ps.elf");
 
 fn dump_main_info() {
-    println!(
-        "[main_info] kernel_entry\t\t: {:p}",
-        kernel_entry as *const u8
-    );
-    println!(
-        "[main_info] stvec register\t\t: {:#x}",
-        read_csr(Csr::Stvec)
-    );
+    log_info!("main", "kernel_entry\t\t: {:p}", kernel_entry as *const u8);
+    log_info!("main", "stvec register\t\t: {:#x}", read_csr(Csr::Stvec));
 }
 
 fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
@@ -47,11 +42,12 @@ fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
     let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
     let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
     node.read(buf).unwrap();
-    println!("[test_vfs] id={:?}", node.get_id());
+    log_debug!("vfs", "id={:?}", node.get_id());
     buf
 }
 
 fn main() {
+    log::set_log_level(log::LogLevel::Trace);
     dump_main_info();
 
     allocator::ALLOC.init_heap();

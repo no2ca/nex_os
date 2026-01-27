@@ -1,4 +1,4 @@
-use crate::{mem::PageFlags, println};
+use crate::{log_debug, log_info, mem::PageFlags};
 use bitflags::bitflags;
 use zerocopy::{FromBytes, FromZeroes};
 
@@ -72,16 +72,16 @@ pub struct LoadedElf {
 }
 
 pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
-    println!("[load_elf] Loading elf data at {:p}", elf_data);
+    log_info!("load_elf", "Loading elf data at {:p}", elf_data);
     let ehdr = Elf64Ehdr::read_from_prefix(elf_data).unwrap();
 
-    println!("Loading ELF header:");
+    log_debug!("load_elf", "Loading ELF header:");
     let e_entry = ehdr.e_entry as usize;
     let e_phoff = ehdr.e_phoff as usize;
     let e_phnum = ehdr.e_phnum as usize;
-    println!("\te_entry={:#x}", e_entry);
-    println!("\te_phoff={:#x}", e_phoff);
-    println!("\te_phnum={:#x}", e_phnum);
+    log_debug!("load_elf", "e_entry={:#x}", e_entry);
+    log_debug!("load_elf", "e_phoff={:#x}", e_phoff);
+    log_debug!("load_elf", "e_phnum={:#x}", e_phnum);
 
     // TODO: 動的配列が作れるようになったら変える
     let mut segments = [const { None }; SEGMENT_MAX];
@@ -98,7 +98,7 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
             continue;
         }
 
-        println!("Program header (PT_LOAD) {}:", i);
+        log_debug!("load_elf", "Program header (PT_LOAD) {}:", i);
 
         // 変数を取り出す
         let p_type = phdr.p_type;
@@ -107,12 +107,12 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
         let p_vaddr = phdr.p_vaddr as usize;
         let p_filesz = phdr.p_filesz as usize;
         let p_memsz = phdr.p_memsz as usize;
-        println!("\tp_type={:#x}", p_type);
-        println!("\tp_flags={:#x}", p_flags);
-        println!("\tp_offset={:#x}", p_offset);
-        println!("\tp_vaddr={:#x}", p_vaddr);
-        println!("\tp_filesz={:#x}", p_filesz);
-        println!("\tp_memsz={:#x}", p_memsz);
+        log_debug!("load_elf", "p_type={:#x}", p_type);
+        log_debug!("load_elf", "p_flags={:#x}", p_flags);
+        log_debug!("load_elf", "p_offset={:#x}", p_offset);
+        log_debug!("load_elf", "p_vaddr={:#x}", p_vaddr);
+        log_debug!("load_elf", "p_filesz={:#x}", p_filesz);
+        log_debug!("load_elf", "p_memsz={:#x}", p_memsz);
 
         // フラグをページテーブルの使うフラグに変換する
         let seg_flags = SegmentFlags::from_bits_truncate(p_flags);

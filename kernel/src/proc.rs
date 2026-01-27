@@ -116,7 +116,7 @@ impl Process {
 use crate::allocator::PAGE_SIZE;
 use crate::mem::{self, PageFlags};
 use crate::utils::align_up;
-use crate::{allocator, csr, loadelf, println};
+use crate::{allocator, csr, loadelf, log_debug, log_info, log_trace, log_warn};
 use core::arch::asm;
 use core::{arch::naked_asm, cell::UnsafeCell};
 use core::{slice, usize};
@@ -190,12 +190,13 @@ impl ProcessTable {
 }
 
 pub fn dump_process_list(verdose: bool) {
-    println!("[proc] process list:");
+    log_info!("proc", "process list:");
     let ptable = unsafe { PTABLE.get() };
     for proc in ptable.procs.iter() {
         if proc.state != ProcState::Unused || verdose {
-            println!(
-                "\tpid={}, state={:?}, ra={:p}, entry={:p}, sp={:p}",
+            log_debug!(
+                "proc",
+                "pid={}, state={:?}, ra={:p}, entry={:p}, sp={:p}",
                 proc.pid.as_usize(),
                 proc.state,
                 proc.context.ra as *const u8,
@@ -231,7 +232,7 @@ fn schedule<'a>() -> &'a Process {
             return p;
         }
     }
-    println!("[scheduler] No runnable process found");
+    log_warn!("scheduler", "No runnable process found");
     return &procs[0];
 }
 
@@ -307,7 +308,7 @@ fn map_user_pages(loaded: &loadelf::LoadedElf, page_table: &mut [usize]) {
             let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
 
             // ユーザープログラムのデータをコピー
-            println!("[create_process] copying user program dst={:p}", page);
+            log_debug!("proc", "copying user program dst={:p}", page);
             // セグメントの先頭がアラインされていない場合に同じ途中からの位置からコピーする
             let seg_start = seg.vaddr % PAGE_SIZE;
             // WARNING: 同じ長さでないとpanicする
@@ -319,9 +320,13 @@ fn map_user_pages(loaded: &loadelf::LoadedElf, page_table: &mut [usize]) {
             // ユーザ空間のマッピング
             let page_start_paddr = page_ptr as usize;
             let page_start_vaddr = align_up(seg.vaddr, PAGE_SIZE);
-            println!(
-                "[create_process] mapping vaddr={:#x} to paddr={:#x}, pages_num={}, flag={:?}",
-                page_start_vaddr, page_start_paddr, pages_num, seg.flags
+            log_debug!(
+                "proc",
+                "mapping vaddr={:#x} to paddr={:#x}, pages_num={}, flag={:?}",
+                page_start_vaddr,
+                page_start_paddr,
+                pages_num,
+                seg.flags
             );
             for i in 0..pages_num {
                 let paddr = page_start_paddr + i * PAGE_SIZE;
@@ -358,7 +363,6 @@ fn switch_context(prev: &mut Process, next: &Process) {
         // user_entryでsretしたときに最初に飛ぶアドレス
         csr::write_csr(csr::Csr::Sepc, entry_point);
     }
-    println!("[switch_context] time: {}", crate::timer::read_time());
     let prev_ctx = &mut prev.context;
     let next_ctx = &next.context;
     _swtch(prev_ctx, next_ctx);
@@ -437,9 +441,11 @@ pub fn yield_process() {
     let prev_proc = unsafe { PTABLE.get_mut().current_proc_mut_ref() };
     let next_proc = schedule();
 
-    println!(
-        "[yield_process] switching ... {:?} -> {:?}",
-        prev_proc.pid, next_proc.pid
+    log_info!(
+        "proc",
+        "switching ... {:?} -> {:?}",
+        prev_proc.pid,
+        next_proc.pid
     );
     switch_context(prev_proc, next_proc);
 }
@@ -452,9 +458,11 @@ pub fn end_process() {
 
     let next_proc = schedule();
 
-    println!(
-        "[end_process] switching ... {:?} (exited) -> {:?}",
-        prev_proc.pid, next_proc.pid
+    log_info!(
+        "proc",
+        "switching ... {:?} (exited) -> {:?}",
+        prev_proc.pid,
+        next_proc.pid
     );
 
     switch_context(prev_proc, next_proc);
@@ -492,7 +500,7 @@ pub fn create_idle_process() {
 /// idleプロセスで実行される関数
 #[allow(unused)]
 fn idle_process() {
-    println!("[idle_process] idling...");
+    log_debug!("proc", "idling...");
     loop {
         core::hint::spin_loop();
     }

@@ -1,7 +1,7 @@
 use core::arch::asm;
 
 use crate::csr::{Csr, write_csr};
-use crate::println;
+use crate::log_info;
 use crate::trap::kernel_entry;
 use crate::utils::memset;
 
@@ -30,13 +30,11 @@ pub extern "C" fn _start() {
         let size = end.offset_from(start) as usize;
         memset(start as *mut u8, 0, size);
 
-        println!(
-            "\n[boot] kernel loaded address\t: {:p}",
-            _start as *const u8
-        );
+        log_info!("boot", "kernel loaded address\t: {:p}", _start as *const u8);
 
-        println!(
-            "[boot] kernel stack top\t\t: {:p}",
+        log_info!(
+            "boot",
+            "kernel stack top\t\t: {:p}",
             &__stack_top as *const u8
         );
     }

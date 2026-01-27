@@ -1,9 +1,9 @@
-use crate::println;
+use crate::log_error;
 use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("{}", info);
+    log_error!("panic", "{}", info);
     loop {}
 }
 
