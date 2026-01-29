@@ -64,6 +64,7 @@ impl GlobalPageAllocator {
         }
     }
 
+    #[allow(clippy::mut_from_ref)]
     #[inline]
     pub fn alloc_pages<T>(&self, n: usize) -> &mut [T] {
         unsafe { (&mut *self.inner.get()).alloc_pages::<T>(n) }
@@ -92,8 +93,8 @@ impl BumpPointerAlloc {
         unsafe {
             let head = &__heap_start as *const _ as usize;
             let end = &__heap_end as *const _ as usize;
-            *self.head.get() = head.into();
-            *self.end.get() = end.into();
+            *self.head.get() = head;
+            *self.end.get() = end;
         }
     }
 }

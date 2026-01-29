@@ -71,13 +71,13 @@ pub fn _print(args: fmt::Arguments) {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => (crate::userlib::_print(format_args!($($arg)*)););
+    ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)););
 }
 
 #[macro_export]
 macro_rules! println {
     () => (let _ =print!("\n"););
-    ($($arg:tt)*) => (crate::print!("{}\n", format_args!($($arg)*)););
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)););
 }
 
 #[macro_export]

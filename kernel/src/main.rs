@@ -47,7 +47,7 @@ fn test_vfs<'a, F: Fs>(fs: F) -> &'a mut [u8] {
 }
 
 fn main() {
-    log::set_log_level(log::LogLevel::Error);
+    log::set_log_level(log::LogLevel::Trace);
     dump_main_info();
 
     allocator::ALLOC.init_heap();

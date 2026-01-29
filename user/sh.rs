@@ -124,12 +124,12 @@ impl Console {
             "echo" => sh_cmd::builtin_echo(cmd),
             "history" => sh_cmd::builtin_history(&self.history, &self.history_len),
             "ohgiri" => sh_cmd::builtin_ohgiri(),
-            "yield" => sh_cmd::builtin_yield().map_err(ShellError::SyscallError)?,
-            "exit" => sh_cmd::builtin_exit().map_err(ShellError::SyscallError)?,
+            "yield" => sh_cmd::builtin_yield().map_err(ShellError::Syscall)?,
+            "exit" => sh_cmd::builtin_exit().map_err(ShellError::Syscall)?,
             _ => {
                 let f = |sysret| {
                     println!("{command}: command not found");
-                    ShellError::SyscallError(sysret)
+                    ShellError::Syscall(sysret)
                 };
                 userlib::spawn(command).map_err(f)?;
             }
@@ -208,11 +208,11 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 enum ShellError {
     #[error("Error Reading Line: {0}")]
-    ReadLineError(#[from] ReadLineError),
+    ReadLine(#[from] ReadLineError),
     #[error("Parse Error: {0}")]
-    ParseError(#[from] ParseError),
+    Parse(#[from] ParseError),
     #[error("Syscall Error: {0}")]
-    SyscallError(isize),
+    Syscall(isize),
 }
 
 /// 文字列取得に関するエラー
@@ -268,7 +268,7 @@ pub fn test_runner() {
     test_many_echo();
     test_history();
     test_many_history();
-    loop {}
+    userlib::exit_process();
 }
 
 #[cfg(feature = "shell-test")]

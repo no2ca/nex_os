@@ -120,7 +120,7 @@ use crate::utils::align_up;
 use crate::{allocator, csr, loadelf, log_debug, log_info, log_warn, println};
 use core::arch::asm;
 use core::{arch::naked_asm, cell::UnsafeCell};
-use core::{slice, usize};
+use core::slice;
 
 struct ProcessTableCell<T> {
     inner: UnsafeCell<T>,
@@ -142,6 +142,7 @@ impl<T> ProcessTableCell<T> {
 
     /// # Safety
     /// この参照のライフタイムは検証されない
+    #[allow(clippy::mut_from_ref)]
     #[inline]
     unsafe fn get_mut(&self) -> &mut T {
         unsafe { &mut *self.inner.get() }
@@ -234,7 +235,7 @@ fn schedule<'a>() -> &'a Process {
         }
     }
     log_warn!("scheduler", "No runnable process found");
-    return &procs[0];
+    &procs[0]
 }
 
 /// # Safety
@@ -274,7 +275,7 @@ fn create_process_from_loaded(loaded: loadelf::LoadedElf) {
     // ユーザー空間をマッピング
     map_user_pages(&loaded, page_table);
 
-    let pt_number = mem::SATP_SV39 | (page_table_ptr as usize) / allocator::PAGE_SIZE;
+    let pt_number = mem::SATP_SV39 | ((page_table_ptr as usize) / allocator::PAGE_SIZE);
 
     // TODO: インデックスがPidになるのは一時的な実装
     // → これはProcState::Exitedを導入して被らないようにしている
@@ -305,43 +306,41 @@ fn map_kernel_pages(page_table: &mut [usize]) {
 /// ユーザーのマッピングを行う関数
 /// allocatorが連続した領域を確保してくれることを前提にする
 fn map_user_pages(loaded: &loadelf::LoadedElf, page_table: &mut [usize]) {
-    for maybe_seg in loaded.loadable_segments.iter() {
-        if let Some(seg) = maybe_seg {
-            // 必要なページ数を計算
-            let pages_num = seg.memsz.div_ceil(allocator::PAGE_SIZE);
+    for seg in loaded.loadable_segments.iter().flatten() {
+        // 必要なページ数を計算
+        let pages_num = seg.memsz.div_ceil(allocator::PAGE_SIZE);
 
-            // マッピング先の領域を取得
-            let page_ptr = allocator::PAGE_ALLOC
-                .alloc_pages::<u8>(pages_num)
-                .as_mut_ptr();
-            let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
+        // マッピング先の領域を取得
+        let page_ptr = allocator::PAGE_ALLOC
+            .alloc_pages::<u8>(pages_num)
+            .as_mut_ptr();
+        let page: &mut [u8] = unsafe { slice::from_raw_parts_mut(page_ptr, seg.filesz) };
 
-            // ユーザープログラムのデータをコピー
-            log_debug!("proc", "copying user program dst={:p}", page);
-            // セグメントの先頭がアラインされていない場合に同じ途中からの位置からコピーする
-            let seg_start = seg.vaddr % PAGE_SIZE;
-            // WARNING: 同じ長さでないとpanicする
-            page[seg_start..seg_start + seg.filesz].copy_from_slice(seg.data);
+        // ユーザープログラムのデータをコピー
+        log_debug!("proc", "copying user program dst={:p}", page);
+        // セグメントの先頭がアラインされていない場合に同じ途中からの位置からコピーする
+        let seg_start = seg.vaddr % PAGE_SIZE;
+        // WARNING: 同じ長さでないとpanicする
+        page[seg_start..seg_start + seg.filesz].copy_from_slice(seg.data);
 
-            // ユーザーフラグの設定
-            let user_flags = PageFlags::U | seg.flags;
+        // ユーザーフラグの設定
+        let user_flags = PageFlags::U | seg.flags;
 
-            // ユーザ空間のマッピング
-            let page_start_paddr = page_ptr as usize;
-            let page_start_vaddr = align_up(seg.vaddr, PAGE_SIZE);
-            log_debug!(
-                "proc",
-                "mapping vaddr={:#x} to paddr={:#x}, pages_num={}, flag={:?}",
-                page_start_vaddr,
-                page_start_paddr,
-                pages_num,
-                seg.flags
-            );
-            for i in 0..pages_num {
-                let paddr = page_start_paddr + i * PAGE_SIZE;
-                let vaddr = page_start_vaddr + i * PAGE_SIZE;
-                mem::map_page(page_table, vaddr, paddr, user_flags);
-            }
+        // ユーザ空間のマッピング
+        let page_start_paddr = page_ptr as usize;
+        let page_start_vaddr = align_up(seg.vaddr, PAGE_SIZE);
+        log_debug!(
+            "proc",
+            "mapping vaddr={:#x} to paddr={:#x}, pages_num={}, flag={:?}",
+            page_start_vaddr,
+            page_start_paddr,
+            pages_num,
+            seg.flags
+        );
+        for i in 0..pages_num {
+            let paddr = page_start_paddr + i * PAGE_SIZE;
+            let vaddr = page_start_vaddr + i * PAGE_SIZE;
+            mem::map_page(page_table, vaddr, paddr, user_flags);
         }
     }
 }
@@ -500,7 +499,7 @@ pub fn create_idle_process() {
     let page_table_ptr = allocator::PAGE_ALLOC.alloc_pages::<usize>(1).as_mut_ptr();
     let page_table: &mut [usize] = unsafe { core::slice::from_raw_parts_mut(page_table_ptr, 512) };
     let pt_number =
-        mem::SATP_SV39 | (page_table_ptr as *const usize as usize) / allocator::PAGE_SIZE;
+        mem::SATP_SV39 | ((page_table_ptr as *const usize as usize) / allocator::PAGE_SIZE);
 
     // カーネル空間をマッピング
     map_kernel_pages(page_table);
@@ -509,7 +508,7 @@ pub fn create_idle_process() {
     proc.state = ProcState::Runnable;
     proc.kernel_stack.base = kernel_stack_base;
     proc.kernel_stack.size = kernel_stack_size;
-    proc.context.ra = idle_process as usize;
+    proc.context.ra = idle_process as usize; // カーネル空間の関数のポインタ
     proc.context.sp = proc.kernel_stack.top() as usize;
     proc.pt_number = pt_number;
 }

@@ -18,7 +18,7 @@ pub unsafe fn memset(mut dst: *mut u8, val: u8, count: usize) {
 }
 
 pub fn is_aligned(addr: usize, align: usize) -> bool {
-    addr % align == 0
+    addr.is_multiple_of(align)
 }
 
 #[allow(unused)]

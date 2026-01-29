@@ -34,16 +34,16 @@ pub fn _print(args: fmt::Arguments) -> Result<(), fmt::Error> {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => (let _ = crate::console::_print(format_args!($($arg)*)););
+    ($($arg:tt)*) => (let _ = $crate::console::_print(format_args!($($arg)*)););
 }
 
 #[macro_export]
 macro_rules! println {
     () => (let _ =print!("\n"););
-    ($($arg:tt)*) => (crate::print!("{}\n", format_args!($($arg)*)););
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)););
 }
 
-// TODO: 引数はi32ではなくusizeの方がいいかも
+#[allow(clippy::too_many_arguments)]
 fn sbi_call(
     arg0: i32,
     arg1: i32,

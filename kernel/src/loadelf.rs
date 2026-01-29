@@ -83,11 +83,9 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
     log_debug!("load_elf", "e_phoff={:#x}", e_phoff);
     log_debug!("load_elf", "e_phnum={:#x}", e_phnum);
 
-    // TODO: 動的配列が作れるようになったら変える
     let mut segments = [const { None }; SEGMENT_MAX];
 
-    // TODO: flagsの情報を利用したい
-    for i in 0..e_phnum {
+    for (i, loadable_segment) in segments.iter_mut().enumerate().take(e_phnum) {
         // プログラムヘッダの情報が入った構造体を作る
         let ph_start = e_phoff + i * size_of::<Elf64Phdr>();
         let phdr =
@@ -135,7 +133,7 @@ pub fn load_elf(elf_data: &'static [u8]) -> LoadedElf {
             memsz: p_memsz,
         };
 
-        segments[i] = Some(seg);
+        *loadable_segment = Some(seg);
     }
 
     LoadedElf {
