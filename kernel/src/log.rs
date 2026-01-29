@@ -1,5 +1,6 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
+#[allow(unused)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum LogLevel {

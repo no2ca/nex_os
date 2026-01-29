@@ -50,6 +50,38 @@ struct TrapFrame {
     sp: usize,
 }
 
+fn handle_create_process(frame: &mut TrapFrame) {
+    let path_ptr = frame.a0 as *const u8;
+    let path_len = frame.a1;
+    let mut bytes = alloc::vec::Vec::with_capacity(path_len);
+
+    unsafe {
+        crate::csr::set_sum();
+        for i in 0..path_len {
+            bytes.push(*path_ptr.add(i));
+        }
+        crate::csr::clear_sum();
+    }
+
+    let path = core::str::from_utf8(&bytes).unwrap();
+    log_info!("ksyscall", "path='{}'", path);
+    let fs = vfs::MemoryFs;
+
+    let node = if let Some(node) = fs.lookup(path) {
+        node
+    } else {
+        log_warn!("ksyscall", "file not found");
+        frame.a0 = -1;
+        return;
+    };
+
+    let n = node.size().div_ceil(PAGE_SIZE);
+    let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
+    let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
+    node.read(buf).unwrap();
+    proc::create_process(buf);
+}
+
 pub fn handle_syscall(trap_frame: *mut u8) {
     let trap_frame_slice =
         unsafe { core::slice::from_raw_parts_mut(trap_frame, size_of::<TrapFrame>()) };
@@ -75,35 +107,7 @@ pub fn handle_syscall(trap_frame: *mut u8) {
             proc::end_process();
         }
         SYS_CREATE_PROCESS => {
-            let path_ptr = frame.a0 as *const u8;
-            let path_len = frame.a1;
-            let mut bytes = alloc::vec::Vec::with_capacity(path_len);
-
-            unsafe {
-                crate::csr::set_sum();
-                for i in 0..path_len {
-                    bytes.push(*path_ptr.add(i));
-                }
-                crate::csr::clear_sum();
-            }
-
-            let path = core::str::from_utf8(&bytes).unwrap();
-            log_info!("ksyscall", "path='{}'", path);
-            let fs = vfs::MemoryFs;
-
-            let node = if let Some(node) = fs.lookup(path) {
-                node
-            } else {
-                log_warn!("ksyscall", "file not found");
-                frame.a0 = -1;
-                return;
-            };
-
-            let n = node.size().div_ceil(PAGE_SIZE);
-            let buf_ptr = allocator::PAGE_ALLOC.alloc_pages::<u8>(n).as_mut_ptr();
-            let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, n * PAGE_SIZE) };
-            node.read(buf).unwrap();
-            proc::create_process(buf);
+            handle_create_process(frame);
         }
         SYS_LIST_PROCESS => {
             proc::show_process_list(false);
